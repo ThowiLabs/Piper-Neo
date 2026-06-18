@@ -63,6 +63,9 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/auth.cpp
   src/cpp/server/http.cpp
   src/cpp/server/jobs/chunked_wav.cpp
+  src/cpp/server/markup/audio_parts.cpp
+  src/cpp/server/markup/markup_parser.cpp
+  src/cpp/server/markup/request_options.cpp
   src/cpp/server/markup_tts.cpp
   src/cpp/server/metrics_report.cpp
   src/cpp/server/model_cache.cpp
@@ -142,6 +145,13 @@ if(PIPER_BUILD_TESTS)
     ${PIPER_SANITIZE_SOURCES}
     src/cpp/server/utils.cpp
   )
+
+  add_executable(test_markup_parser
+    src/cpp/tests/test_markup_parser.cpp
+    src/cpp/server/markup/markup_parser.cpp
+    src/cpp/server/markup/request_options.cpp
+    src/cpp/server/utils.cpp
+  )
 endif()
 
 # NOTE: external project prefix are shortened because of path length restrictions on Windows
@@ -200,6 +210,7 @@ if(NOT DEFINED PIPER_PHONEMIZE_DIR)
   add_dependencies(piper piper_phonemize_external)
   if(PIPER_BUILD_TESTS)
     add_dependencies(test_piper piper_phonemize_external)
+    add_dependencies(test_markup_parser piper_phonemize_external)
   endif()
 endif()
 
@@ -286,6 +297,7 @@ if(PIPER_BUILD_TESTS)
   target_compile_features(test_piper PUBLIC cxx_std_17)
   target_compile_features(test_neo_package PUBLIC cxx_std_17)
   target_compile_features(test_text_sanitizer PUBLIC cxx_std_17)
+  target_compile_features(test_markup_parser PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -303,6 +315,12 @@ if(PIPER_BUILD_TESTS)
   target_include_directories(
     test_text_sanitizer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_markup_parser PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+    ${PIPER_PHONEMIZE_DIR}/include
   )
 
   target_link_directories(
@@ -328,6 +346,11 @@ if(PIPER_BUILD_TESTS)
   add_test(
     NAME test_text_sanitizer
     COMMAND test_text_sanitizer
+  )
+
+  add_test(
+    NAME test_markup_parser
+    COMMAND test_markup_parser
   )
 endif()
 

@@ -118,7 +118,10 @@ model_cache.*           Réplicas de modelos y leases de voces.
 tts_scheduler.*         Cola justa, concurrencia y workers de síntesis.
 metrics_report.*        Reportes JSON de política de recursos y métricas.
 jobs/chunked_wav.*      Ensamblado de WAV desde chunks RAW temporales.
-markup_tts.*            Parser de markup TTS, silencios y mezcla de segmentos.
+markup_tts.*            Orquestador de síntesis markup TTS multi-segmento.
+markup/markup_parser.*  Parser de `<model>`/`<silence>`, atributos, speakers y silencios.
+markup/request_options.* Opciones float de requests JSON para markup/API.
+markup/audio_parts.*    Piezas de audio, resampling, ensamblado WAV y JSON de segmentos.
 wav_utils.*             Lectura/escritura WAV PCM y resampling lineal simple.
 output_cleanup.*        Limpieza de temporales y retención de outputs.
 ```
@@ -175,14 +178,15 @@ Esta separación evita que el formato `.neo` vuelva a mezclar parsing binario, c
 1. `server.cpp` acepta la conexión.
 2. `request_handler.*` lee, autoriza y enruta la petición.
 3. `auth.*` valida token si está configurado.
-4. `markup_tts.*` detecta si el texto usa markup TTS.
-5. `text_sanitizer.*` coordina `sanitize/*` para limpiar texto plano o segmentos y calcular riesgo.
-6. `tts_scheduler.*` divide trabajo en chunks y administra cola/concurrencia.
-7. `model_cache.*` entrega una voz disponible o carga réplica del modelo.
-8. `piper/api.hpp` y `src/cpp/core/` ejecutan normalización, fonemización e inferencia.
-9. `jobs/chunked_wav.*` ensambla los chunks RAW en un WAV final.
-10. `metrics_report.*` expone métricas y política de recursos como JSON.
-11. `request_handler.*` responde JSON con la URL del archivo generado.
+4. `markup/markup_parser.*` detecta y divide markup TTS en segmentos.
+5. `markup_tts.*` coordina síntesis por segmento y mezcla final WAV.
+6. `text_sanitizer.*` coordina `sanitize/*` para limpiar texto plano o segmentos y calcular riesgo.
+7. `tts_scheduler.*` divide trabajo en chunks y administra cola/concurrencia.
+8. `model_cache.*` entrega una voz disponible o carga réplica del modelo.
+9. `piper/api.hpp` y `src/cpp/core/` ejecutan normalización, fonemización e inferencia.
+10. `jobs/chunked_wav.*` ensambla los chunks RAW en un WAV final.
+11. `metrics_report.*` expone métricas y política de recursos como JSON.
+12. `request_handler.*` responde JSON con la URL del archivo generado.
 
 ## Límites conservados
 

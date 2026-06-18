@@ -70,8 +70,8 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 ### Prioridad media
 
 1. `src/cpp/server/tts_scheduler.cpp`: seguir separando estado/job runner si crece la concurrencia.
-2. `src/cpp/server/markup_tts.cpp`: separar parser, validación, render y mezcla WAV.
-3. `src/cpp/server/request_handler.cpp`: separar rutas si el API crece.
+2. `src/cpp/server/request_handler.cpp`: separar rutas si el API crece.
+3. `src/cpp/server/markup_tts.cpp`: ya separa parser/opciones/audio; falta prueba de integración HTTP/WAV real.
 4. `src/cpp/server/text_sanitizer.cpp`: ya está modular; ampliar pruebas con payloads HTTP reales.
 
 ### Prioridad baja
@@ -86,8 +86,9 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 - Chunking: textos largos, signos `¿?`, `¡!`, URLs, decimales, abreviaturas y saltos de línea.
 - HTTP: GET, POST, query params, payload grande, headers malformados.
 - Sanitizer: `test_text_sanitizer` ya cubre texto normal, código, URLs/correos, markup, markdown, emoji, input enorme e UTF-8 inválido; falta probar integración HTTP.
+- Markup: `test_markup_parser` cubre `<model>`, `<silence>`, speakers y opciones request; falta integración con scheduler/WAV real.
 - Audio real: `.onnx`, `.neo`, `--output_raw`, stdin largo y servidor local.
 
 ## Estado recomendado
 
-El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación y la limpieza de CLI ya fueron aplicados; el siguiente paso recomendable es agregar pruebas pequeñas de CLI/HTTP y continuar con `markup_tts.cpp` con cobertura específica.
+El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación, la limpieza de CLI, sanitizer y markup TTS ya fueron aplicados; el siguiente paso recomendable es separar rutas de `request_handler.cpp` y agregar pruebas HTTP pequeñas.

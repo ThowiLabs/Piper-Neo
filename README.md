@@ -254,7 +254,8 @@ cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
-ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer" --output-on-failure
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_markup_parser
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser" --output-on-failure
 ```
 
 ## Internal C++ architecture
@@ -282,6 +283,7 @@ More details are available in `docs/core-architecture.md` and `contexto/`.
 - `docs/text-normalization.md`: model text normalization.
 - `docs/text-preprocessing.md`: server-side TTS sanitizer.
 - `src/cpp/tests/test_text_sanitizer.cpp`: functional sanitizer coverage for URLs, emails, markup, code, emojis and invalid UTF-8.
+- `src/cpp/tests/test_markup_parser.cpp`: functional markup parser coverage for `<model>`, `<silence>`, speaker ids and request options.
 - `docs/markup-tts.md`: local multi-voice markup.
 - `neo-docs/neo-format.md`: `.neo` package format.
 

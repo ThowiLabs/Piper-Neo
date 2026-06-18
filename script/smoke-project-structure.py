@@ -61,6 +61,13 @@ REQUIRED_FILES = [
     "src/cpp/server/sanitize/utf8_text.hpp",
     "src/cpp/server/sanitize/utf8_text.cpp",
     "src/cpp/tests/test_text_sanitizer.cpp",
+    "src/cpp/server/markup/markup_parser.hpp",
+    "src/cpp/server/markup/markup_parser.cpp",
+    "src/cpp/server/markup/request_options.hpp",
+    "src/cpp/server/markup/request_options.cpp",
+    "src/cpp/server/markup/audio_parts.hpp",
+    "src/cpp/server/markup/audio_parts.cpp",
+    "src/cpp/tests/test_markup_parser.cpp",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -93,6 +100,10 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/server/sanitize/risk_score.cpp",
     "src/cpp/server/sanitize/utf8_text.cpp",
     "src/cpp/tests/test_text_sanitizer.cpp",
+    "src/cpp/server/markup/markup_parser.cpp",
+    "src/cpp/server/markup/request_options.cpp",
+    "src/cpp/server/markup/audio_parts.cpp",
+    "src/cpp/tests/test_markup_parser.cpp",
 ]
 
 EXPECTED_CONTEXT = {
@@ -111,6 +122,7 @@ EXPECTED_CONTEXT = {
     "12-api-publica-pruebas-scheduler.md",
     "13-refactor-sanitizer-api.md",
     "14-correccion-build-loadvoice.md",
+    "15-refactor-markup-tts.md",
 }
 
 
@@ -203,6 +215,18 @@ def main() -> None:
             fail(f"CMakeLists.txt no referencia módulo sanitizer: {source}")
     if '#include "types.hpp"' in (ROOT / "src/cpp/server/utils.hpp").read_text(encoding="utf-8"):
         fail("utils.hpp no debe incluir server/types.hpp; usar json.hpp para evitar acoplar utilidades al core Piper")
+
+    markup_tts_lines = (ROOT / "src/cpp/server/markup_tts.cpp").read_text(encoding="utf-8").splitlines()
+    if len(markup_tts_lines) > 260:
+        fail(f"src/cpp/server/markup_tts.cpp volvió a concentrar parser/render: {len(markup_tts_lines)} líneas")
+    for source in [
+        "src/cpp/server/markup/markup_parser.cpp",
+        "src/cpp/server/markup/request_options.cpp",
+        "src/cpp/server/markup/audio_parts.cpp",
+        "src/cpp/tests/test_markup_parser.cpp",
+    ]:
+        if source not in cmake:
+            fail(f"CMakeLists.txt no referencia módulo markup: {source}")
 
 
     piper_api = (ROOT / "src/cpp/piper/api.hpp").read_text(encoding="utf-8")

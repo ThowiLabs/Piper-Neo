@@ -254,7 +254,8 @@ cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
-ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer" --output-on-failure
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_markup_parser
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser" --output-on-failure
 ```
 
 ## Arquitectura interna C++
@@ -268,6 +269,7 @@ El core C++ está dividido por responsabilidades:
 - `src/cpp/server.cpp`: runtime del servidor local, sockets y loop de aceptación.
 - `src/cpp/server/`: HTTP, auth, routing, sanitización, modelos, caché, scheduler TTS, métricas, markup TTS, WAV, jobs y limpieza.
 - `src/cpp/server/sanitize/`: lógica interna del sanitizer API para UTF-8/Unicode, filtros de contenido y cálculo de riesgo.
+- `src/cpp/server/markup/`: parser de markup TTS, opciones JSON, piezas de audio y ensamblado multi-segmento.
 - `src/cpp/text_normalizer.cpp` y `src/cpp/text/`: normalización configurable por modelo.
 - `src/cpp/neo_model.cpp` y `src/cpp/neo/`: fachada pública y módulos internos para lectura, inspección, extracción y escritura de paquetes `.neo`.
 

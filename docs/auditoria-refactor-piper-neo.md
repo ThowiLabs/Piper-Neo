@@ -34,6 +34,10 @@ Solución implementada: `parseTarget` y `urlDecode` quedaron centralizados en `s
 
 Solución implementada: se eliminó `apps/`, se limpió `.gitignore`, se reescribió README y se reinició `contexto/` para el estado público actual.
 
+### 8. `piper_app.cpp` mezclaba modos de ejecución
+
+Solución implementada: la exportación `.neo`, carga de runtime/voz, modo servidor y síntesis CLI/stdin/JSON/RAW quedaron separados en módulos específicos bajo `src/cpp/app/`.
+
 ## Deuda técnica restante
 
 ### Alta prioridad
@@ -41,7 +45,7 @@ Solución implementada: se eliminó `apps/`, se limpió `.gitignore`, se reescri
 1. `src/cpp/neo_model.cpp`: ya quedó como fachada; seguir con pruebas funcionales de `.neo`.
 2. `src/cpp/piper.hpp`: reducir includes pesados con una fachada compatible.
 3. `src/cpp/app/cli_args.cpp`: separar help text, parser y validación.
-4. `src/cpp/app/piper_app.cpp`: separar modos `server`, `export .neo`, `stdin`, `output_raw` y salida WAV.
+4. `src/cpp/app/synthesis_mode.cpp`: agregar pruebas de stdin, JSON input, output WAV y RAW.
 
 ### Prioridad media
 
@@ -66,4 +70,4 @@ Solución implementada: se eliminó `apps/`, se limpió `.gitignore`, se reescri
 
 ## Estado recomendado
 
-El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo` ya fue aplicado; el siguiente paso recomendable es agregar pruebas funcionales del formato `.neo` antes de tocar más runtime.
+El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo` y la separación de modos de aplicación ya fueron aplicados; el siguiente paso recomendable es agregar pruebas funcionales del formato `.neo` y pruebas pequeñas de CLI antes de tocar más runtime.

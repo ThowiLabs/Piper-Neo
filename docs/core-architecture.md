@@ -49,7 +49,11 @@ hardware.*              Detección de CPU, memoria y límites cgroup.
 env.*                   Resolución de token desde argumento, entorno o .env.
 platform.*              Detalles del ejecutable y consola por plataforma.
 raw_audio_output.*      Escritura progresiva de audio RAW a stdout.
-piper_app.*             Orquestación de CLI, server mode y exportación .neo.
+export_neo_mode.*       Modo de exportación de paquetes `.neo`.
+voice_runtime.*         Preparación de voz, eSpeak, tashkeel y overrides de síntesis.
+server_mode.*           Conversión de RunConfig a ServerOptions y ejecución HTTP.
+synthesis_mode.*        Síntesis CLI por stdin, archivo, JSON, WAV y RAW.
+piper_app.*             Orquestador mínimo y selector de modo.
 ```
 
 ## `src/cpp/core/`
@@ -136,16 +140,18 @@ Esta separación evita que el formato `.neo` vuelva a mezclar parsing binario, c
 
 ## Flujo de síntesis CLI/WAV
 
-1. `app/piper_app.*` resuelve argumentos, entrada y salida.
-2. `loadVoice()` lee config JSON y carga el modelo mediante `core/model_runtime.*`.
-3. `textToWavFile()` o `textToWavFileFromStream()` escriben header WAV progresivo.
-4. `textToAudio()` normaliza texto por modelo si corresponde.
-5. El pipeline aplica tashkeel opcional.
-6. El pipeline fonemiza con eSpeak o codepoints.
-7. Los fonemas se convierten a ids.
-8. `model_runtime.*` ejecuta ONNX Runtime.
-9. Se agregan silencios de frase/oración.
-10. El writer WAV parchea el header si el stream es seekable.
+1. `app/piper_app.*` parsea argumentos y selecciona modo.
+2. `app/voice_runtime.*` prepara la voz, eSpeak/tashkeel y aplica overrides.
+3. `app/synthesis_mode.*` resuelve entrada/salida: stdin, texto directo, archivo, JSON, WAV o RAW.
+4. `loadVoice()` lee config JSON y carga el modelo mediante `core/model_runtime.*`.
+5. `textToWavFile()` o `textToWavFileFromStream()` escriben header WAV progresivo.
+6. `textToAudio()` normaliza texto por modelo si corresponde.
+7. El pipeline aplica tashkeel opcional.
+8. El pipeline fonemiza con eSpeak o codepoints.
+9. Los fonemas se convierten a ids.
+10. `model_runtime.*` ejecuta ONNX Runtime.
+11. Se agregan silencios de frase/oración.
+12. El writer WAV parchea el header si el stream es seekable.
 
 ## Flujo de una petición TTS HTTP
 

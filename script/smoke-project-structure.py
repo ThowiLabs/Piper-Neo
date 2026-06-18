@@ -30,6 +30,14 @@ REQUIRED_FILES = [
     "src/cpp/neo/package_reader.cpp",
     "src/cpp/neo/package_writer.cpp",
     "src/cpp/neo_model.cpp",
+    "src/cpp/app/export_neo_mode.cpp",
+    "src/cpp/app/export_neo_mode.hpp",
+    "src/cpp/app/server_mode.cpp",
+    "src/cpp/app/server_mode.hpp",
+    "src/cpp/app/synthesis_mode.cpp",
+    "src/cpp/app/synthesis_mode.hpp",
+    "src/cpp/app/voice_runtime.cpp",
+    "src/cpp/app/voice_runtime.hpp",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -48,6 +56,10 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/neo/package_reader.cpp",
     "src/cpp/neo/package_writer.cpp",
     "src/cpp/neo_model.cpp",
+    "src/cpp/app/export_neo_mode.cpp",
+    "src/cpp/app/server_mode.cpp",
+    "src/cpp/app/synthesis_mode.cpp",
+    "src/cpp/app/voice_runtime.cpp",
 ]
 
 EXPECTED_CONTEXT = {
@@ -61,6 +73,7 @@ EXPECTED_CONTEXT = {
     "07-pruebas-pendientes.md",
     "08-refactor-paquetes-neo.md",
     "09-restauracion-workflow-release.md",
+    "10-refactor-modos-app-core.md",
 }
 
 

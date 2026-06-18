@@ -28,6 +28,7 @@ Leer en este orden:
 7. `07-pruebas-pendientes.md`
 8. `08-refactor-paquetes-neo.md`
 9. `09-restauracion-workflow-release.md`
+10. `10-refactor-modos-app-core.md`
 
 # Librerías usadas
 
@@ -42,6 +43,7 @@ Las mismas del proyecto: C++17, fmt, spdlog, piper-phonemize, espeak-ng, ONNX Ru
 - `.github/workflows/build-release.yml`
 - `contexto/*`
 - `src/cpp/neo/*`
+- `src/cpp/app/*`
 - `docs/text-preprocessing.md`
 
 # Problemas encontrados
@@ -54,8 +56,8 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/` y `neo_model.cpp` es solo fachada pública.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública y los modos de aplicación CLI viven en módulos específicos bajo `src/cpp/app/`.
 
 # Próximos pasos
 
-Probar el build real de Windows después del refactor `.neo` y agregar pruebas funcionales de empaquetado/inspección/extracción.
+Probar el build real de Windows después del refactor de modos CLI y agregar pruebas funcionales de empaquetado/inspección/extracción `.neo`.

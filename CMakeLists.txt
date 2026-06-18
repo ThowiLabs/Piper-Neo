@@ -38,10 +38,14 @@ endif()
 set(PIPER_APP_SOURCES
   src/cpp/app/cli_args.cpp
   src/cpp/app/env.cpp
+  src/cpp/app/export_neo_mode.cpp
   src/cpp/app/hardware.cpp
   src/cpp/app/piper_app.cpp
   src/cpp/app/platform.cpp
   src/cpp/app/raw_audio_output.cpp
+  src/cpp/app/server_mode.cpp
+  src/cpp/app/synthesis_mode.cpp
+  src/cpp/app/voice_runtime.cpp
 )
 
 set(PIPER_SERVER_SOURCES

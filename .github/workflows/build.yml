@@ -1,0 +1,72 @@
+name: Build Piper Neo
+run-name: Build Piper Neo #${{ github.run_number }} · ${{ github.ref_name }}
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_windows:
+    runs-on: windows-latest
+    name: Build Windows amd64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install zstd
+        shell: pwsh
+        run: |
+          vcpkg install zstd:x64-windows
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -B build `
+            -DCMAKE_INSTALL_PREFIX=_install/piper `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build Piper Neo
+        shell: pwsh
+        run: |
+          cmake --build build --config Release
+
+      - name: Install Piper Neo
+        shell: pwsh
+        run: |
+          cmake --install build --config Release
+
+      - name: Copy runtime DLLs
+        shell: pwsh
+        run: |
+          $binDir = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed/x64-windows/bin"
+          if (Test-Path $binDir) {
+            Copy-Item "$binDir/*.dll" "_install/piper/" -ErrorAction SilentlyContinue
+          }
+
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          .\_install\piper\piper.exe --help
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -LiteralPath _install/piper -DestinationPath piper_windows_amd64.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: piper-windows-amd64
+          path: piper_windows_amd64.zip
+          if-no-files-found: error

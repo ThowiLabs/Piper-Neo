@@ -19,7 +19,9 @@ El formato `.neo` es un contenedor binario propio que incluye metadata JSON, mod
 
 - `src/cpp/piper.cpp` / `piper.hpp`: inferencia, fonemización, chunking inteligente y escritura WAV progresiva.
 - `src/cpp/server.cpp` / `server.hpp`: HTTP API, autenticación opcional, scheduler justo por chunks, cache de modelos y endpoints.
-- `src/cpp/neo_model.cpp` / `neo_model.hpp`: lectura, inspección, exportación y extracción del formato `.neo`.
+- `src/cpp/neo_model.hpp`: contrato público del formato `.neo`.
+- `src/cpp/neo_model.cpp`: fachada pública.
+- `src/cpp/neo/`: lectura binaria, compresión, imágenes, reader y writer del paquete `.neo`.
 - `docs/`: documentación de usuario/API.
 - `neo-docs/`: contexto técnico del proyecto y decisiones de arquitectura.
 

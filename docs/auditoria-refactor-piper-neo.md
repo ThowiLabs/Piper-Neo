@@ -38,7 +38,7 @@ Solución implementada: se eliminó `apps/`, se limpió `.gitignore`, se reescri
 
 ### Alta prioridad
 
-1. `src/cpp/neo_model.cpp`: separar reader, writer, compression, extraction e image payload.
+1. `src/cpp/neo_model.cpp`: ya quedó como fachada; seguir con pruebas funcionales de `.neo`.
 2. `src/cpp/piper.hpp`: reducir includes pesados con una fachada compatible.
 3. `src/cpp/app/cli_args.cpp`: separar help text, parser y validación.
 4. `src/cpp/app/piper_app.cpp`: separar modos `server`, `export .neo`, `stdin`, `output_raw` y salida WAV.
@@ -66,4 +66,4 @@ Solución implementada: se eliminó `apps/`, se limpió `.gitignore`, se reescri
 
 ## Estado recomendado
 
-El repo está listo como base pública inicial del motor Piper Neo. El siguiente refactor grande debe ser `neo_model.cpp`, pero solo después de agregar pruebas mínimas del formato `.neo`.
+El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo` ya fue aplicado; el siguiente paso recomendable es agregar pruebas funcionales del formato `.neo` antes de tocar más runtime.

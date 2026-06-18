@@ -23,6 +23,13 @@ REQUIRED_FILES = [
     "src/cpp/core/text_chunker.cpp",
     "src/cpp/core/voice_loader.cpp",
     "src/cpp/core/wav_stream_writer.cpp",
+    "src/cpp/neo/binary_io.cpp",
+    "src/cpp/neo/compression.cpp",
+    "src/cpp/neo/file_utils.cpp",
+    "src/cpp/neo/image_payload.cpp",
+    "src/cpp/neo/package_reader.cpp",
+    "src/cpp/neo/package_writer.cpp",
+    "src/cpp/neo_model.cpp",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -34,6 +41,13 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/core/text_chunker.cpp",
     "src/cpp/core/voice_loader.cpp",
     "src/cpp/core/wav_stream_writer.cpp",
+    "src/cpp/neo/binary_io.cpp",
+    "src/cpp/neo/compression.cpp",
+    "src/cpp/neo/file_utils.cpp",
+    "src/cpp/neo/image_payload.cpp",
+    "src/cpp/neo/package_reader.cpp",
+    "src/cpp/neo/package_writer.cpp",
+    "src/cpp/neo_model.cpp",
 ]
 
 EXPECTED_CONTEXT = {
@@ -45,6 +59,7 @@ EXPECTED_CONTEXT = {
     "05-paquetes-neo.md",
     "06-build-workflow.md",
     "07-pruebas-pendientes.md",
+    "08-refactor-paquetes-neo.md",
 }
 
 
@@ -68,6 +83,21 @@ def main() -> None:
     piper_lines = (ROOT / "src/cpp/piper.cpp").read_text(encoding="utf-8").splitlines()
     if len(piper_lines) > 80:
         fail(f"src/cpp/piper.cpp volvió a crecer demasiado: {len(piper_lines)} líneas")
+
+    neo_model_lines = (ROOT / "src/cpp/neo_model.cpp").read_text(encoding="utf-8").splitlines()
+    if len(neo_model_lines) > 140:
+        fail(f"src/cpp/neo_model.cpp volvió a concentrar demasiada lógica: {len(neo_model_lines)} líneas")
+
+    for source in [
+        "src/cpp/neo/binary_io.cpp",
+        "src/cpp/neo/compression.cpp",
+        "src/cpp/neo/file_utils.cpp",
+        "src/cpp/neo/image_payload.cpp",
+        "src/cpp/neo/package_reader.cpp",
+        "src/cpp/neo/package_writer.cpp",
+    ]:
+        if source not in cmake:
+            fail(f"CMakeLists.txt no referencia módulo .neo: {source}")
 
 
     http_cpp = (ROOT / "src/cpp/server/http.cpp").read_text(encoding="utf-8")

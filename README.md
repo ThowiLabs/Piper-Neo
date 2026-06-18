@@ -260,7 +260,7 @@ The C++ core is split by responsibility:
 - `src/cpp/server.cpp`: local HTTP server runtime, sockets and accept loop.
 - `src/cpp/server/`: HTTP, auth, request routing, text sanitization, models, cache, TTS scheduler, markup TTS, WAV and cleanup modules.
 - `src/cpp/text_normalizer.cpp` and `src/cpp/text/`: configurable model text normalization.
-- `src/cpp/neo_model.cpp`: reading, inspection, extraction and writing of `.neo` packages.
+- `src/cpp/neo_model.cpp` and `src/cpp/neo/`: public facade and internal modules for reading, inspection, extraction and writing of `.neo` packages.
 
 More details are available in `docs/core-architecture.md` and `contexto/`.
 

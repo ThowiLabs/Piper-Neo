@@ -60,6 +60,17 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/wav_utils.cpp
 )
 
+
+set(PIPER_NEO_SOURCES
+  src/cpp/neo/binary_io.cpp
+  src/cpp/neo/compression.cpp
+  src/cpp/neo/file_utils.cpp
+  src/cpp/neo/image_payload.cpp
+  src/cpp/neo/package_reader.cpp
+  src/cpp/neo/package_writer.cpp
+  src/cpp/neo_model.cpp
+)
+
 set(PIPER_TEXT_SOURCES
   src/cpp/text/builtin_normalizer.cpp
   src/cpp/text/replacements.cpp
@@ -78,7 +89,7 @@ set(PIPER_CORE_SOURCES
   src/cpp/core/text_chunker.cpp
   src/cpp/core/voice_loader.cpp
   src/cpp/core/wav_stream_writer.cpp
-  src/cpp/neo_model.cpp
+  ${PIPER_NEO_SOURCES}
   ${PIPER_TEXT_SOURCES}
 )
 

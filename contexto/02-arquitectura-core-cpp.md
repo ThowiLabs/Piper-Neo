@@ -25,7 +25,8 @@ src/cpp/server.cpp               runtime de servidor y loop accept
 src/cpp/server/                  HTTP, auth, routing, sanitización, modelos, cache, scheduler y WAV
 src/cpp/text_normalizer.cpp      API pública de normalización
 src/cpp/text/                    implementación interna de normalización
-src/cpp/neo_model.cpp            lectura/escritura de paquetes .neo
+src/cpp/neo_model.cpp            fachada pública de paquetes .neo
+src/cpp/neo/                      implementación interna de paquetes .neo
 ```
 
 # Librerías usadas
@@ -49,6 +50,8 @@ src/cpp/neo_model.cpp            lectura/escritura de paquetes .neo
 - `src/cpp/server/*`
 - `src/cpp/text_normalizer.cpp`
 - `src/cpp/text/*`
+- `src/cpp/neo_model.cpp`
+- `src/cpp/neo/*`
 
 # Problemas encontrados
 
@@ -65,7 +68,7 @@ src/cpp/neo_model.cpp            lectura/escritura de paquetes .neo
 
 # Pendientes
 
-- Separar `neo_model.cpp` si crece más.
+- Agregar pruebas funcionales de `.neo` para exportación, inspección, extracción e imagen.
 - Separar rutas HTTP si el API aumenta.
 - Agregar pruebas C++ específicas para chunking, paquetes `.neo` y parser HTTP.
 

@@ -27,6 +27,7 @@ src/cpp/core/
 src/cpp/text_normalizer.cpp
 src/cpp/text/
 src/cpp/neo_model.cpp
+src/cpp/neo/
 ```
 
 ## `main.cpp`
@@ -115,6 +116,24 @@ text/builtin_normalizer.*    Builtins protegidos: URL, email, versión, moneda, 
 
 La normalización sigue apagada para JSON clásicos. Solo se activa si el modelo declara `neo.text_normalization` o trae `modelcard.replacements` legacy.
 
+## `src/cpp/neo_model.cpp` y `src/cpp/neo/`
+
+La API pública de paquetes `.neo` se mantiene en `neo_model.hpp`. La implementación queda dividida así:
+
+```text
+neo_model.cpp            Fachada pública: inspect, extract, read image y write package.
+neo/constants.hpp        Magic, versión y códigos de compresión.
+neo/package_types.hpp    Tipos internos de sección y paquete.
+neo/binary_io.*          Serialización little-endian y strings.
+neo/file_utils.*         Lectura/escritura de archivos, lower-case y hash de caché.
+neo/compression.*        zstd opcional y validación de tamaños.
+neo/image_payload.*      MIME de imagen y data URI base64.
+neo/package_reader.*     Parseo de directorio y lectura de secciones.
+neo/package_writer.*     Exportación desde ONNX/config/imagen a `.neo`.
+```
+
+Esta separación evita que el formato `.neo` vuelva a mezclar parsing binario, compresión, extracción, imágenes y escritura en un solo archivo.
+
 ## Flujo de síntesis CLI/WAV
 
 1. `app/piper_app.*` resuelve argumentos, entrada y salida.
@@ -145,7 +164,7 @@ La normalización sigue apagada para JSON clásicos. Solo se activa si el modelo
 
 - La API puede quedar abierta si no se define token, igual que antes.
 - La salida de archivos sigue restringida por nombres seguros.
-- `.neo` sigue gestionado por `neo_model.*`.
+- `.neo` sigue exponiendo contrato público en `neo_model.*`, pero la implementación interna vive en `src/cpp/neo/`.
 - La normalización de texto no muta configuración compartida durante síntesis.
 - Los scripts de build locales siguen intactos.
 - No se agregaron dependencias nuevas.
@@ -165,5 +184,6 @@ cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
 - Probar síntesis real con `.onnx` y `.neo`.
 - Probar `--output_raw`, WAV normal y stdin largo.
 - Agregar smoke tests HTTP para `/api/health`, `/api/v1/models`, `/api/v1/tts` y archivos.
+- Agregar pruebas funcionales de `.neo`: exportar, inspeccionar, extraer e imagen embebida.
 - Separar `request_handler.*` por endpoint solo si crecen rutas o pruebas HTTP.
 - Evaluar CMake moderno por targets si se decide tocar el sistema de build con más calma.

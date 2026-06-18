@@ -260,7 +260,7 @@ El core C++ está dividido por responsabilidades:
 - `src/cpp/server.cpp`: runtime del servidor local, sockets y loop de aceptación.
 - `src/cpp/server/`: HTTP, auth, routing, sanitización, modelos, caché, scheduler TTS, markup TTS, WAV y limpieza.
 - `src/cpp/text_normalizer.cpp` y `src/cpp/text/`: normalización configurable por modelo.
-- `src/cpp/neo_model.cpp`: lectura, inspección, extracción y escritura de paquetes `.neo`.
+- `src/cpp/neo_model.cpp` y `src/cpp/neo/`: fachada pública y módulos internos para lectura, inspección, extracción y escritura de paquetes `.neo`.
 
 Más detalles en `docs/core-architecture.md` y `contexto/`.
 

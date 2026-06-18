@@ -1,6 +1,7 @@
 #ifndef PIPER_NEO_MODEL_H_
 #define PIPER_NEO_MODEL_H_
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>

@@ -11,7 +11,8 @@
 - El repo público queda enfocado en el motor Piper Neo.
 - La carpeta `apps/` fue eliminada.
 - El contexto anterior fue reemplazado por archivos actuales y coherentes.
-- El workflow `Build Piper Neo` compila automáticamente en `push` a `main` y publica release solo en ejecución manual.
+- `Build Piper Neo` compila automáticamente en `push`/pull request hacia `main` y no crea releases.
+- `Build Release Piper Neo` es manual y crea/actualiza GitHub Releases con `piper_windows_amd64.zip`.
 - Los modelos reales, outputs y builds locales quedan ignorados.
 
 # Arquitectura actual
@@ -26,6 +27,7 @@ Leer en este orden:
 6. `06-build-workflow.md`
 7. `07-pruebas-pendientes.md`
 8. `08-refactor-paquetes-neo.md`
+9. `09-restauracion-workflow-release.md`
 
 # Librerías usadas
 
@@ -36,7 +38,8 @@ Las mismas del proyecto: C++17, fmt, spdlog, piper-phonemize, espeak-ng, ONNX Ru
 - `README.md`
 - `README.es.md`
 - `.gitignore`
-- `.github/workflows/main.yml`
+- `.github/workflows/build.yml`
+- `.github/workflows/build-release.yml`
 - `contexto/*`
 - `src/cpp/neo/*`
 - `docs/text-preprocessing.md`

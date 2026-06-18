@@ -60,6 +60,7 @@ EXPECTED_CONTEXT = {
     "06-build-workflow.md",
     "07-pruebas-pendientes.md",
     "08-refactor-paquetes-neo.md",
+    "09-restauracion-workflow-release.md",
 }
 
 
@@ -110,6 +111,27 @@ def main() -> None:
 
     if (ROOT / "apps").exists():
         fail("apps/ no debe existir en el repo público del motor Piper Neo")
+
+    required_workflows = [
+        ".github/workflows/build.yml",
+        ".github/workflows/build-release.yml",
+    ]
+    for workflow in required_workflows:
+        if not (ROOT / workflow).exists():
+            fail(f"falta workflow requerido: {workflow}")
+    if (ROOT / ".github/workflows/main.yml").exists():
+        fail(".github/workflows/main.yml fue reemplazado por build.yml y build-release.yml")
+
+    build_workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    release_workflow = (ROOT / ".github/workflows/build-release.yml").read_text(encoding="utf-8")
+    if "push:" not in build_workflow or "branches:" not in build_workflow or "- main" not in build_workflow:
+        fail("build.yml debe validar push hacia main")
+    if "gh release create" in build_workflow or "gh release upload" in build_workflow:
+        fail("build.yml no debe crear releases")
+    if "workflow_dispatch:" not in release_workflow or "push:" in release_workflow:
+        fail("build-release.yml debe ser manual y no automatico")
+    if "gh release create" not in release_workflow or "gh release upload" not in release_workflow:
+        fail("build-release.yml debe crear o actualizar GitHub Releases")
 
     context_files = {path.name for path in (ROOT / "contexto").glob("*.md")}
     if context_files != EXPECTED_CONTEXT:

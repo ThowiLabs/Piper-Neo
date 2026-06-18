@@ -220,13 +220,16 @@ py script\build-windows.py
 
 ### GitHub Actions
 
-El workflow público está en:
+Los workflows públicos están en:
 
 ```text
-.github/workflows/main.yml
+.github/workflows/build.yml
+.github/workflows/build-release.yml
 ```
 
-Se muestra como **Build Piper Neo** en la pestaña Actions. Corre automáticamente en cada `push` a `main` y también puede ejecutarse manualmente para publicar un release con el artefacto `piper_windows_amd64.zip`.
+**Build Piper Neo** corre automáticamente en cada `push`/pull request hacia `main` y solo publica un artefacto del workflow.
+
+**Build Release Piper Neo** es solo manual. Ejecútalo desde la pestaña Actions cuando quieras compilar Windows amd64, crear o actualizar un GitHub Release y subir `piper_windows_amd64.zip`.
 
 ### Build CMake genérico
 

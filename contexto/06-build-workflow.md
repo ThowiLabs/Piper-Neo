@@ -9,18 +9,19 @@ Documentar el build local y el workflow público de GitHub para Piper Neo standa
 # Decisiones tomadas
 
 - El script local `script/build-windows.py` se conserva sin cambios.
-- El workflow `.github/workflows/main.yml` se llama ahora `Build Piper Neo` para que GitHub Actions lo muestre claramente como build.
-- El workflow corre automáticamente en `push` a `main`.
-- El workflow también permite ejecución manual con `workflow_dispatch` para publicar releases.
-- El job de release solo corre cuando el workflow se ejecuta manualmente.
-- El checkout usa explícitamente la rama `main`.
-- No se usa `master` en el workflow.
+- `.github/workflows/build.yml` se llama `Build Piper Neo` y valida automáticamente `push`/pull request hacia `main`.
+- `.github/workflows/build-release.yml` se llama `Build Release Piper Neo` y solo corre con `workflow_dispatch`.
+- El build automático no crea releases.
+- El build-release manual crea o actualiza GitHub Releases y adjunta `piper_windows_amd64.zip`.
+- El checkout del release usa explícitamente la rama `main`.
+- Todos los workflows apuntan a `main` cuando necesitan una rama objetivo.
 
 # Arquitectura actual
 
 ```text
 script/build-windows.py          build local Windows usado para pruebas manuales
-.github/workflows/main.yml       build automático en main y release manual
+.github/workflows/build.yml           build automático en main, sin release
+.github/workflows/build-release.yml   build-release manual con GitHub Releases
 CMakeLists.txt                   build C++ del motor Piper Neo
 Dockerfile.cli                   imagen CLI/servidor Linux
 docker-compose-cli.yml           compose para servidor local
@@ -39,7 +40,8 @@ docker-compose-cli.yml           compose para servidor local
 
 # Archivos importantes modificados
 
-- `.github/workflows/main.yml`
+- `.github/workflows/build.yml`
+- `.github/workflows/build-release.yml`
 - `.gitignore`
 - `CMakeLists.txt`
 - `script/build-windows.py`
@@ -52,19 +54,17 @@ docker-compose-cli.yml           compose para servidor local
 
 # Soluciones implementadas
 
-- El workflow ahora se llama `Build Piper Neo`.
-- El `run-name` ahora muestra `Build Piper Neo #<número> · <rama>`.
-- Se agregó trigger automático para `push` a `main`.
-- El release se mantiene dentro del mismo workflow, pero condicionado a `workflow_dispatch`.
-- El workflow publica artefacto `piper_windows_amd64.zip` en cada build.
-- El release manual adjunta `piper_windows_amd64.zip` a una versión numérica.
+- `Build Piper Neo` mantiene el build automático y publica solo artefactos temporales de workflow.
+- `Build Release Piper Neo` restaura el comportamiento original de creación/actualización de releases.
+- El build-release manual resuelve versión numérica, crea o actualiza el release y adjunta `piper_windows_amd64.zip`.
+- Se elimina la mezcla de release dentro del workflow automático.
 
 # Pendientes
 
-- Probar el workflow en GitHub después del siguiente push a `main`.
-- Si GitHub muestra una X, abrir el run y revisar el primer step fallido real.
+- Probar `Build Piper Neo` en el siguiente push a `main`.
+- Probar `Build Release Piper Neo` manualmente desde Actions para confirmar que crea o actualiza el release.
 - Confirmar que `vcpkg install zstd:x64-windows` funciona correctamente en `windows-latest`.
 
 # Próximos pasos
 
-Subir esta corrección a `main`, entrar en la pestaña Actions y validar que aparezca el workflow `Build Piper Neo` con el job `Build Windows amd64`.
+Subir esta corrección a `main`, validar el workflow automático `Build Piper Neo` y ejecutar manualmente `Build Release Piper Neo` cuando se quiera publicar una versión descargable.

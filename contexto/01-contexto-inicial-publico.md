@@ -44,7 +44,8 @@ models/           placeholder para voces locales
 - `README.md`
 - `README.es.md`
 - `.gitignore`
-- `.github/workflows/main.yml`
+- `.github/workflows/build.yml`
+- `.github/workflows/build-release.yml`
 - `contexto/*`
 
 # Problemas encontrados
@@ -58,12 +59,12 @@ models/           placeholder para voces locales
 - Se eliminó `apps/`.
 - Se reescribieron README y contexto para el repo público del motor.
 - Se limpiaron reglas residuales de `.gitignore`.
-- Se ajustó el workflow para operar desde `main`.
+- Se ajustaron los workflows para operar desde `main`: build automático sin release y build-release manual con GitHub Releases.
 
 # Pendientes
 
 - Validar build local con `script/build-windows.py`.
-- Validar workflow manual en GitHub después de subir el repo.
+- Validar `Build Piper Neo` en push a `main` y ejecutar manualmente `Build Release Piper Neo` cuando se publique una versión.
 - Probar síntesis real con modelos `.onnx` y `.neo`.
 
 # Próximos pasos

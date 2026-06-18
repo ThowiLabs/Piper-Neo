@@ -214,9 +214,19 @@ When running the API server, `models/` may contain both `.onnx` voices and `.neo
 Use the existing Windows build script:
 
 ```bat
-py scriptuild-windows.py clean
-py scriptuild-windows.py
+py script\build-windows.py clean
+py script\build-windows.py
 ```
+
+### GitHub Actions
+
+The public workflow is located at:
+
+```text
+.github/workflows/main.yml
+```
+
+It appears as **Build Piper Neo** in the Actions tab. It runs automatically on every `push` to `main` and can also be started manually to publish a release with the `piper_windows_amd64.zip` artifact.
 
 ### Generic CMake build
 

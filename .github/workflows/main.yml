@@ -1,11 +1,14 @@
-name: release
-run-name: Release from main
+name: Build Piper Neo
+run-name: Build Piper Neo #${{ github.run_number }} · ${{ github.ref_name }}
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Tag/release exacto para subir assets. Déjalo vacío para usar release vacío existente o crear el siguiente 1.1, 1.2, 2.1..."
+        description: "Tag/release exacto. Vacío = crear siguiente versión numérica 1.1, 1.2, 1.3..."
         required: false
         default: ""
 
@@ -18,76 +21,93 @@ env:
 jobs:
   build_windows:
     runs-on: windows-latest
-    name: "windows build: ${{ matrix.arch }}"
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: [x64]
+    name: Build Windows amd64
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_BRANCH }}
           fetch-depth: 0
-      - name: install zstd
-        run: |
-          vcpkg install zstd:${{ matrix.arch }}-windows
-      - name: configure
-        run: |
-          cmake -Bbuild -DCMAKE_INSTALL_PREFIX=_install/piper -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-      - name: build
-        run: |
-          cmake --build build --config Release
-      - name: install
-        run: |
-          cmake --install build
-      - name: copy vcpkg runtime dlls
+
+      - name: Install zstd
         shell: pwsh
         run: |
-          $triplet = "${{ matrix.arch }}-windows"
-          $binDir = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed/$triplet/bin"
+          vcpkg install zstd:x64-windows
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -B build `
+            -DCMAKE_INSTALL_PREFIX=_install/piper `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build Piper Neo
+        shell: pwsh
+        run: |
+          cmake --build build --config Release
+
+      - name: Install Piper Neo
+        shell: pwsh
+        run: |
+          cmake --install build --config Release
+
+      - name: Copy runtime DLLs
+        shell: pwsh
+        run: |
+          $binDir = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed/x64-windows/bin"
           if (Test-Path $binDir) {
             Copy-Item "$binDir/*.dll" "_install/piper/" -ErrorAction SilentlyContinue
           }
-      - name: smoke test packaged executable
+
+      - name: Smoke test executable
         shell: pwsh
         run: |
           .\_install\piper\piper.exe --help
-      - name: package
+
+      - name: Package artifact
+        shell: pwsh
         run: |
-          cd _install
-          Compress-Archive -LiteralPath piper -DestinationPath piper_windows_amd64.zip
-      - name: upload artifacts
+          Compress-Archive -LiteralPath _install/piper -DestinationPath piper_windows_amd64.zip -Force
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: piper-windows-amd64
-          path: _install/piper_windows_amd64.zip
+          path: piper_windows_amd64.zip
           if-no-files-found: error
 
   release:
-    name: Create or update release from main
+    name: Publish release
     runs-on: ubuntu-latest
     needs:
       - build_windows
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_BRANCH }}
           fetch-depth: 0
+
       - name: Resolve main commit
         id: main_commit
         shell: bash
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
+
       - name: Normalize asset names
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p release-upload
           cp release-assets/piper-windows-amd64/piper_windows_amd64.zip release-upload/piper_windows_amd64.zip
+
       - name: Resolve release version
         id: release_meta
         env:
@@ -121,7 +141,10 @@ jobs:
             release_tag="$requested"
           else
             mapfile -t numeric_tags < <(
-              gh release list --limit 100 --json tagName,isDraft,isPrerelease                 --jq '.[] | select(.isDraft == false and .isPrerelease == false) | .tagName'               | while read -r tag; do normalize_numeric_tag "$tag" || true; done               | sort -t. -k1,1n -k2,2n
+              gh release list --limit 100 --json tagName,isDraft,isPrerelease \
+                --jq '.[] | select(.isDraft == false and .isPrerelease == false) | .tagName' \
+              | while read -r tag; do normalize_numeric_tag "$tag" || true; done \
+              | sort -t. -k1,1n -k2,2n
             )
 
             if [[ ${#numeric_tags[@]} -eq 0 ]]; then
@@ -139,26 +162,25 @@ jobs:
           fi
 
           release_title="Piper Neo ${release_tag}"
-          release_notes="Build manual de Piper Neo desde main.
-
-Commit: ${MAIN_SHA}
-Run: ${GITHUB_RUN_NUMBER}
-Plataforma: Windows amd64"
-
           {
             echo "release_tag=${release_tag}"
             echo "release_title=${release_title}"
             echo "release_notes<<EOF"
-            echo -e "${release_notes}"
+            echo "Build manual de Piper Neo desde main."
+            echo ""
+            echo "Commit: ${MAIN_SHA}"
+            echo "Run: ${GITHUB_RUN_NUMBER}"
+            echo "Plataforma: Windows amd64"
             echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Write release notes
         shell: bash
         env:
           RELEASE_NOTES: ${{ steps.release_meta.outputs.release_notes }}
         run: |
-          printf '%s
-' "$RELEASE_NOTES" > release-notes.md
+          printf '%s\n' "$RELEASE_NOTES" > release-notes.md
+
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -170,8 +192,20 @@ Plataforma: Windows amd64"
           title="${{ steps.release_meta.outputs.release_title }}"
 
           if gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release edit "$tag"               --repo "${GITHUB_REPOSITORY}"               --target "$TARGET_SHA"               --title "$title"               --notes-file release-notes.md               --latest
-            gh release upload "$tag" release-upload/*               --repo "${GITHUB_REPOSITORY}"               --clobber
+            gh release edit "$tag" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "$TARGET_SHA" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --latest
+            gh release upload "$tag" release-upload/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
           else
-            gh release create "$tag" release-upload/*               --repo "${GITHUB_REPOSITORY}"               --target "$TARGET_SHA"               --title "$title"               --notes-file release-notes.md               --latest
+            gh release create "$tag" release-upload/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "$TARGET_SHA" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --latest
           fi

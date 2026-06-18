@@ -11,7 +11,7 @@
 - El repo público queda enfocado en el motor Piper Neo.
 - La carpeta `apps/` fue eliminada.
 - El contexto anterior fue reemplazado por archivos actuales y coherentes.
-- El workflow de release/build de GitHub trabaja explícitamente desde `main`.
+- El workflow `Build Piper Neo` compila automáticamente en `push` a `main` y publica release solo en ejecución manual.
 - Los modelos reales, outputs y builds locales quedan ignorados.
 
 # Arquitectura actual
@@ -53,4 +53,4 @@ Mantener estos archivos actualizados cuando cambien arquitectura, build, API, no
 
 # Próximos pasos
 
-Probar el ZIP limpio, subirlo a un repo público inicial y validar el workflow manual de release desde `main`.
+Subir el ZIP limpio al repo público, hacer push a `main` y validar que aparezca el workflow `Build Piper Neo`.

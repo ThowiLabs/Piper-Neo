@@ -1,13 +1,18 @@
 #ifndef PIPER_SERVER_HTTP_H_
 #define PIPER_SERVER_HTTP_H_
 
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <winsock2.h>
 #else
 #include <sys/socket.h>

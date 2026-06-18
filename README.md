@@ -267,7 +267,8 @@ The C++ core is split by responsibility:
 - `src/cpp/piper.hpp` and `src/cpp/piper/`: compatible public facade, public types and engine API.
 - `src/cpp/core/`: Piper runtime, voice loading, ONNX inference, chunking, synthesis pipeline and WAV streaming.
 - `src/cpp/server.cpp`: local HTTP server runtime, sockets and accept loop.
-- `src/cpp/server/`: HTTP, auth, request routing, text sanitization, models, cache, TTS scheduler, metrics, markup TTS, WAV, jobs and cleanup modules.
+- `src/cpp/server/`: HTTP, auth, route dispatch, text sanitization, models, cache, TTS scheduler, metrics, markup TTS, WAV, jobs and cleanup modules.
+- `src/cpp/server/routes/`: HTTP API routes split by responsibility: health/status/metrics, models/images, generated files and TTS synthesis.
 - `src/cpp/server/sanitize/`: API text sanitizer internals for UTF-8/Unicode, content filters and risk scoring.
 - `src/cpp/text_normalizer.cpp` and `src/cpp/text/`: configurable model text normalization.
 - `src/cpp/neo_model.cpp` and `src/cpp/neo/`: public facade and internal modules for reading, inspection, extraction and writing of `.neo` packages.

@@ -267,7 +267,8 @@ El core C++ está dividido por responsabilidades:
 - `src/cpp/piper.hpp` y `src/cpp/piper/`: fachada pública compatible, tipos públicos y API del motor.
 - `src/cpp/core/`: runtime Piper, carga de voz, inferencia ONNX, chunking, pipeline de síntesis y escritura WAV.
 - `src/cpp/server.cpp`: runtime del servidor local, sockets y loop de aceptación.
-- `src/cpp/server/`: HTTP, auth, routing, sanitización, modelos, caché, scheduler TTS, métricas, markup TTS, WAV, jobs y limpieza.
+- `src/cpp/server/`: HTTP, auth, dispatch de rutas, sanitización, modelos, caché, scheduler TTS, métricas, markup TTS, WAV, jobs y limpieza.
+- `src/cpp/server/routes/`: rutas HTTP separadas por responsabilidad: health/status/métricas, modelos/imágenes, archivos generados y síntesis TTS.
 - `src/cpp/server/sanitize/`: lógica interna del sanitizer API para UTF-8/Unicode, filtros de contenido y cálculo de riesgo.
 - `src/cpp/server/markup/`: parser de markup TTS, opciones JSON, piezas de audio y ensamblado multi-segmento.
 - `src/cpp/text_normalizer.cpp` y `src/cpp/text/`: normalización configurable por modelo.

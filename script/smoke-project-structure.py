@@ -68,6 +68,15 @@ REQUIRED_FILES = [
     "src/cpp/server/markup/audio_parts.hpp",
     "src/cpp/server/markup/audio_parts.cpp",
     "src/cpp/tests/test_markup_parser.cpp",
+    "src/cpp/server/routes/route_context.hpp",
+    "src/cpp/server/routes/health_routes.hpp",
+    "src/cpp/server/routes/health_routes.cpp",
+    "src/cpp/server/routes/model_routes.hpp",
+    "src/cpp/server/routes/model_routes.cpp",
+    "src/cpp/server/routes/file_routes.hpp",
+    "src/cpp/server/routes/file_routes.cpp",
+    "src/cpp/server/routes/tts_routes.hpp",
+    "src/cpp/server/routes/tts_routes.cpp",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -104,6 +113,10 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/server/markup/request_options.cpp",
     "src/cpp/server/markup/audio_parts.cpp",
     "src/cpp/tests/test_markup_parser.cpp",
+    "src/cpp/server/routes/health_routes.cpp",
+    "src/cpp/server/routes/model_routes.cpp",
+    "src/cpp/server/routes/file_routes.cpp",
+    "src/cpp/server/routes/tts_routes.cpp",
 ]
 
 EXPECTED_CONTEXT = {
@@ -123,6 +136,7 @@ EXPECTED_CONTEXT = {
     "13-refactor-sanitizer-api.md",
     "14-correccion-build-loadvoice.md",
     "15-refactor-markup-tts.md",
+    "16-refactor-rutas-http.md",
 }
 
 
@@ -227,6 +241,19 @@ def main() -> None:
     ]:
         if source not in cmake:
             fail(f"CMakeLists.txt no referencia módulo markup: {source}")
+
+
+    request_handler_lines = (ROOT / "src/cpp/server/request_handler.cpp").read_text(encoding="utf-8").splitlines()
+    if len(request_handler_lines) > 120:
+        fail(f"src/cpp/server/request_handler.cpp volvió a concentrar rutas HTTP: {len(request_handler_lines)} líneas")
+    for source in [
+        "src/cpp/server/routes/health_routes.cpp",
+        "src/cpp/server/routes/model_routes.cpp",
+        "src/cpp/server/routes/file_routes.cpp",
+        "src/cpp/server/routes/tts_routes.cpp",
+    ]:
+        if source not in cmake:
+            fail(f"CMakeLists.txt no referencia módulo de rutas: {source}")
 
 
     piper_api = (ROOT / "src/cpp/piper/api.hpp").read_text(encoding="utf-8")

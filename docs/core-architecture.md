@@ -216,5 +216,5 @@ ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text
 - Probar `--output_raw`, WAV normal y stdin largo.
 - Agregar smoke tests HTTP para `/api/health`, `/api/v1/models`, `/api/v1/tts` y archivos.
 - Ampliar pruebas funcionales de `.neo` para cubrir export zstd real cuando zstd esté disponible.
-- Separar `request_handler.*` por endpoint solo si crecen rutas o pruebas HTTP.
+- Agregar pruebas HTTP unitarias para `routes/*` usando un writer/socket simulado.
 - Evaluar CMake moderno por targets si se decide tocar el sistema de build con más calma.

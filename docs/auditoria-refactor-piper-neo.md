@@ -70,7 +70,7 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 ### Prioridad media
 
 1. `src/cpp/server/tts_scheduler.cpp`: seguir separando estado/job runner si crece la concurrencia.
-2. `src/cpp/server/request_handler.cpp`: separar rutas si el API crece.
+2. `src/cpp/server/request_handler.cpp`: ya separa rutas; falta prueba HTTP con sockets simulados.
 3. `src/cpp/server/markup_tts.cpp`: ya separa parser/opciones/audio; falta prueba de integración HTTP/WAV real.
 4. `src/cpp/server/text_sanitizer.cpp`: ya está modular; ampliar pruebas con payloads HTTP reales.
 
@@ -91,4 +91,4 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 
 ## Estado recomendado
 
-El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación, la limpieza de CLI, sanitizer y markup TTS ya fueron aplicados; el siguiente paso recomendable es separar rutas de `request_handler.cpp` y agregar pruebas HTTP pequeñas.
+El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación, la limpieza de CLI, sanitizer y markup TTS ya fueron aplicados; el siguiente paso recomendable es agregar pruebas HTTP pequeñas y separar `http.cpp` si crece el parser/socket IO.

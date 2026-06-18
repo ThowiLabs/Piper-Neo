@@ -73,6 +73,10 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/output_cleanup.cpp
   src/cpp/server/request_handler.cpp
   src/cpp/server/responses.cpp
+  src/cpp/server/routes/file_routes.cpp
+  src/cpp/server/routes/health_routes.cpp
+  src/cpp/server/routes/model_routes.cpp
+  src/cpp/server/routes/tts_routes.cpp
   ${PIPER_SANITIZE_SOURCES}
   src/cpp/server/tts_scheduler.cpp
   src/cpp/server/utils.cpp

@@ -30,6 +30,9 @@ Leer en este orden:
 9. `09-restauracion-workflow-release.md`
 10. `10-refactor-modos-app-core.md`
 11. `11-refactor-cli-args.md`
+12. `12-api-publica-pruebas-scheduler.md`
+13. `13-refactor-sanitizer-api.md`
+14. `14-correccion-build-loadvoice.md`
 
 # Librerías usadas
 
@@ -57,8 +60,8 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/` y los argumentos separan parser, ayuda y validación.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/`, los argumentos separan parser/ayuda/validación, `piper.hpp` es fachada pública, el scheduler delega métricas JSON/WAV chunked a módulos propios el sanitizer API vive separado en `server/sanitize/` y `loadVoice()` recibe `speakerId` como referencia const para no romper `RunConfig` inmutable.
 
 # Próximos pasos
 
-Probar el build real de Windows después del refactor de CLI y agregar pruebas funcionales de empaquetado/inspección/extracción `.neo`.
+Probar el build real de Windows después de la corrección `loadVoice()` y ampliar pruebas funcionales de CLI, HTTP, sanitizer y `.neo` con compresión zstd cuando esté disponible.

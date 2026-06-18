@@ -57,3 +57,33 @@ Piper Neo protege el texto antes de enviarlo al fonemizador y al modelo de voz. 
 ```
 
 Estas métricas permiten detectar entradas problemáticas sin guardar texto crudo de los usuarios.
+
+## Implementación interna
+
+La API pública del sanitizer vive en:
+
+```text
+src/cpp/server/text_sanitizer.hpp
+src/cpp/server/text_sanitizer.cpp
+```
+
+La lógica interna está separada para evitar que un solo archivo vuelva a mezclar todas las reglas:
+
+```text
+src/cpp/server/sanitize_result.*       Resultado, métricas y warnings únicos.
+src/cpp/server/sanitize/utf8_text.*    UTF-8 estricto, Unicode, emojis, whitespace y recorte.
+src/cpp/server/sanitize/content_filters.* HTML, BBCode, markdown, código, alta entropía, URLs y correos.
+src/cpp/server/sanitize/risk_score.*   Cálculo de riesgo por warnings.
+```
+
+## Prueba funcional
+
+El sanitizer tiene una prueba C++ opcional que no requiere modelos ONNX:
+
+```bash
+cmake -S . -B build-tests -DPIPER_BUILD_TESTS=ON
+cmake --build build-tests --target test_text_sanitizer
+ctest --test-dir build-tests -R test_text_sanitizer --output-on-failure
+```
+
+Cubre texto plano, URLs, correos, HTML, markdown, bloques de código, emojis, texto largo e UTF-8 inválido.

@@ -4,9 +4,12 @@
 #include <cstddef>
 #include <string>
 
-#include "types.hpp"
+#include "../json.hpp"
+#include "sanitize_result.hpp"
 
 namespace piper_server {
+
+using json = nlohmann::json;
 
 std::string sanitizeTtsTextForApi(const std::string &rawText, std::size_t maxChars,
                                   TtsTextSanitizeResult &result);

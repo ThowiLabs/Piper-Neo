@@ -1,7 +1,7 @@
 #ifndef PIPER_CORE_MODEL_RUNTIME_HPP_
 #define PIPER_CORE_MODEL_RUNTIME_HPP_
 
-#include "piper.hpp"
+#include "piper/types.hpp"
 
 #include <optional>
 #include <string>

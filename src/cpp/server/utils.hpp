@@ -5,9 +5,11 @@
 #include <optional>
 #include <string>
 
-#include "types.hpp"
+#include "../json.hpp"
 
 namespace piper_server {
+
+using json = nlohmann::json;
 
 std::string nowIso8601();
 std::string lowerCopy(std::string value);

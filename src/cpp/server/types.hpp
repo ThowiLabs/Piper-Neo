@@ -13,6 +13,7 @@
 
 #include "../json.hpp"
 #include "../piper.hpp"
+#include "sanitize_result.hpp"
 
 namespace piper_server {
 
@@ -28,21 +29,6 @@ struct HttpRequest {
 struct ParsedTarget {
   std::string path;
   std::map<std::string, std::string> query;
-};
-
-struct TtsTextSanitizeResult {
-  bool ok = true;
-  std::string speakText;
-  std::vector<std::string> warnings;
-  double riskScore = 0.0;
-  std::size_t rawBytes = 0;
-  std::size_t speakBytes = 0;
-  std::size_t rawChars = 0;
-  std::size_t speakChars = 0;
-  std::size_t urls = 0;
-  std::size_t emails = 0;
-  std::size_t codeBlocks = 0;
-  std::size_t emojis = 0;
 };
 
 struct ServerMetrics {

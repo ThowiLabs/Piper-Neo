@@ -22,7 +22,9 @@ server.cpp               runtime socket y recursos
 server/http.*            parser HTTP, query params, socket IO y archivos
 server/auth.*            Bearer token y X-API-Token
 server/request_handler.* rutas y validación por request
-server/text_sanitizer.*  limpieza segura antes de TTS
+server/text_sanitizer.*  orquestador de limpieza segura antes de TTS
+server/sanitize_result.* resultado de sanitización y warnings
+server/sanitize/*       UTF-8, filtros de contenido y risk score
 server/model_registry.*  listado y metadata de modelos
 server/model_cache.*     carga y leases de voces
 server/tts_scheduler.*   cola justa y concurrencia
@@ -59,6 +61,7 @@ server/output_cleanup.*  limpieza de temporales y outputs
 - Se centralizaron funciones HTTP en `server/http.*`.
 - Se dejaron utilidades generales en `server/utils.*`.
 - Se mantuvo separación de auth, responses, modelos, cache, scheduler y limpieza.
+- El sanitizer se separó en módulos internos bajo `server/sanitize/` para reducir acoplamiento y facilitar pruebas.
 
 # Pendientes
 

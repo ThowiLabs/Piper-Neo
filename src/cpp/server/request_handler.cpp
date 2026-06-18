@@ -14,6 +14,7 @@
 #include "auth.hpp"
 #include "http.hpp"
 #include "markup_tts.hpp"
+#include "metrics_report.hpp"
 #include "model_cache.hpp"
 #include "model_registry.hpp"
 #include "responses.hpp"

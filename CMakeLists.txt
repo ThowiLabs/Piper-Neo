@@ -50,17 +50,27 @@ set(PIPER_APP_SOURCES
   src/cpp/app/voice_runtime.cpp
 )
 
+set(PIPER_SANITIZE_SOURCES
+  src/cpp/server/sanitize/content_filters.cpp
+  src/cpp/server/sanitize/risk_score.cpp
+  src/cpp/server/sanitize/utf8_text.cpp
+  src/cpp/server/sanitize_result.cpp
+  src/cpp/server/text_sanitizer.cpp
+)
+
 set(PIPER_SERVER_SOURCES
   src/cpp/server.cpp
   src/cpp/server/auth.cpp
   src/cpp/server/http.cpp
+  src/cpp/server/jobs/chunked_wav.cpp
   src/cpp/server/markup_tts.cpp
+  src/cpp/server/metrics_report.cpp
   src/cpp/server/model_cache.cpp
   src/cpp/server/model_registry.cpp
   src/cpp/server/output_cleanup.cpp
   src/cpp/server/request_handler.cpp
   src/cpp/server/responses.cpp
-  src/cpp/server/text_sanitizer.cpp
+  ${PIPER_SANITIZE_SOURCES}
   src/cpp/server/tts_scheduler.cpp
   src/cpp/server/utils.cpp
   src/cpp/server/wav_utils.cpp
@@ -120,6 +130,17 @@ if(PIPER_BUILD_TESTS)
     src/cpp/core/voice_loader.cpp
     src/cpp/core/wav_stream_writer.cpp
     ${PIPER_TEXT_SOURCES}
+  )
+
+  add_executable(test_neo_package
+    src/cpp/tests/test_neo_package.cpp
+    ${PIPER_NEO_SOURCES}
+  )
+
+  add_executable(test_text_sanitizer
+    src/cpp/tests/test_text_sanitizer.cpp
+    ${PIPER_SANITIZE_SOURCES}
+    src/cpp/server/utils.cpp
   )
 endif()
 
@@ -263,6 +284,8 @@ if(PIPER_BUILD_TESTS)
   endif()
 
   target_compile_features(test_piper PUBLIC cxx_std_17)
+  target_compile_features(test_neo_package PUBLIC cxx_std_17)
+  target_compile_features(test_text_sanitizer PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -270,6 +293,16 @@ if(PIPER_BUILD_TESTS)
     ${FMT_DIR}/include
     ${SPDLOG_DIR}/include
     ${PIPER_PHONEMIZE_DIR}/include
+  )
+
+  target_include_directories(
+    test_neo_package PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_text_sanitizer PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
   )
 
   target_link_directories(
@@ -285,6 +318,16 @@ if(PIPER_BUILD_TESTS)
     espeak-ng
     piper_phonemize
     onnxruntime
+  )
+
+  add_test(
+    NAME test_neo_package
+    COMMAND test_neo_package "${CMAKE_CURRENT_BINARY_DIR}/test-neo-package"
+  )
+
+  add_test(
+    NAME test_text_sanitizer
+    COMMAND test_text_sanitizer
   )
 endif()
 

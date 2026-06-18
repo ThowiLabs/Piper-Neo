@@ -1,4 +1,4 @@
-#include "piper.hpp"
+#include "piper/api.hpp"
 
 #include "core/synthesis_utils.hpp"
 

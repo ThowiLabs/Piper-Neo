@@ -1,18 +1,16 @@
 #include "tts_scheduler.hpp"
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <limits>
 #include <stdexcept>
 #include <string>
 
 #include <spdlog/spdlog.h>
 
 #include "utils.hpp"
-#include "wav_utils.hpp"
+#include "server/jobs/chunked_wav.hpp"
 
 namespace piper_server {
 
@@ -402,37 +400,14 @@ void FairTtsScheduler::markChunkFinished(JobState &job) {
 }
 
 void FairTtsScheduler::assembleWav(const JobState &job) {
-  std::uint64_t totalBytes = 0;
-  for (const auto bytes : job.chunkBytes) {
-    totalBytes += bytes;
-  }
-
-  if (totalBytes > std::numeric_limits<std::uint32_t>::max()) {
-    throw std::runtime_error("Generated WAV exceeds 4 GiB. Use smaller inputs or raw output.");
-  }
-
-  std::ofstream output(job.outputPath, std::ios::binary);
-  if (!output.good()) {
-    throw std::runtime_error("Could not open output file");
-  }
-
-  writeServerWavHeader(job.sampleRate, job.sampleWidth, job.channels,
-                       static_cast<std::uint32_t>(totalBytes), output);
-
-  std::array<char, 64 * 1024> buffer{};
-  for (const auto &chunkPath : job.chunkPaths) {
-    std::ifstream chunk(chunkPath, std::ios::binary);
-    if (!chunk.good()) {
-      throw std::runtime_error("Missing synthesized chunk");
-    }
-    while (chunk.good()) {
-      chunk.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-      const auto count = chunk.gcount();
-      if (count > 0) {
-        output.write(buffer.data(), count);
-      }
-    }
-  }
+  ChunkedWavOutput output;
+  output.outputPath = job.outputPath;
+  output.chunkPaths = job.chunkPaths;
+  output.chunkBytes = job.chunkBytes;
+  output.sampleRate = job.sampleRate;
+  output.sampleWidth = job.sampleWidth;
+  output.channels = job.channels;
+  assembleChunkedWav(output);
 }
 
 void FairTtsScheduler::cleanupJob(JobState &job) {
@@ -448,46 +423,6 @@ void FairTtsScheduler::cleanupJob(JobState &job) {
 
   std::error_code ignored;
   std::filesystem::remove_all(job.tempDir, ignored);
-}
-
-json resourcePolicyJson(const ServerOptions &options, const FairTtsScheduler &scheduler) {
-return json{{"mode", "auto"},
-            {"profile", options.cpuProfile},
-            {"hardware_threads", options.resourcePolicy.hardwareThreads},
-            {"memory_bytes", options.resourcePolicy.memoryBytes},
-            {"cpu_threads_per_worker", options.cpuThreads.value_or(0)},
-            {"max_concurrent_jobs", options.maxConcurrentJobs},
-            {"chunk_workers", scheduler.workerTotal()},
-            {"max_model_replicas", options.maxModelReplicas},
-            {"queue_size", options.queueSize},
-            {"queue_timeout_seconds", options.queueTimeoutSeconds},
-            {"max_temp_bytes", options.maxTempBytes},
-            {"active_jobs", scheduler.activeJobCount()},
-            {"waiting_jobs", scheduler.waitingJobCount()}};
-}
-
-json metricsJson(const ServerMetrics &metrics, const FairTtsScheduler &scheduler,
-               const ServerOptions &options) {
-return json{{"jobs",
-             json{{"active", scheduler.activeJobCount()},
-                  {"waiting", scheduler.waitingJobCount()},
-                  {"accepted", metrics.acceptedJobs.load()},
-                  {"completed", metrics.completedJobs.load()},
-                  {"cancelled", metrics.cancelledJobs.load()},
-                  {"failed", metrics.failedJobs.load()},
-                  {"rejected", metrics.rejectedJobs.load()}}},
-            {"chunks",
-             json{{"processing", metrics.processingChunks.load()},
-                  {"completed", metrics.completedChunks.load()},
-                  {"failed", metrics.failedChunks.load()}}},
-            {"storage", json{{"temp_bytes", metrics.tempStorageBytes.load()},
-                                {"max_temp_bytes", options.maxTempBytes},
-                                {"output_retention_seconds", options.outputRetentionSeconds}}},
-            {"resources", resourcePolicyJson(options, scheduler)},
-            {"text_preprocessing",
-             json{{"sanitized_inputs", metrics.sanitizedInputs.load()},
-                  {"sanitize_warnings", metrics.sanitizeWarnings.load()},
-                  {"rejected_inputs", metrics.rejectedTextInputs.load()}}}};
 }
 
 } // namespace piper_server

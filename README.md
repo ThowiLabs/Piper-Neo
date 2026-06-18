@@ -251,6 +251,10 @@ docker compose -f docker-compose-cli.yml build
 python3 script/smoke-text-normalizer.py
 python3 script/smoke-project-structure.py
 cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
+cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer" --output-on-failure
 ```
 
 ## Internal C++ architecture
@@ -259,9 +263,11 @@ The C++ core is split by responsibility:
 
 - `src/cpp/main.cpp`: minimal binary entry point.
 - `src/cpp/app/`: CLI parsing, help text, validation, run configuration, hardware detection, environment resolution and execution modes for CLI/server/export/synthesis.
+- `src/cpp/piper.hpp` and `src/cpp/piper/`: compatible public facade, public types and engine API.
 - `src/cpp/core/`: Piper runtime, voice loading, ONNX inference, chunking, synthesis pipeline and WAV streaming.
 - `src/cpp/server.cpp`: local HTTP server runtime, sockets and accept loop.
-- `src/cpp/server/`: HTTP, auth, request routing, text sanitization, models, cache, TTS scheduler, markup TTS, WAV and cleanup modules.
+- `src/cpp/server/`: HTTP, auth, request routing, text sanitization, models, cache, TTS scheduler, metrics, markup TTS, WAV, jobs and cleanup modules.
+- `src/cpp/server/sanitize/`: API text sanitizer internals for UTF-8/Unicode, content filters and risk scoring.
 - `src/cpp/text_normalizer.cpp` and `src/cpp/text/`: configurable model text normalization.
 - `src/cpp/neo_model.cpp` and `src/cpp/neo/`: public facade and internal modules for reading, inspection, extraction and writing of `.neo` packages.
 
@@ -275,6 +281,7 @@ More details are available in `docs/core-architecture.md` and `contexto/`.
 - `docs/resource-management-plan.md`: resource management notes.
 - `docs/text-normalization.md`: model text normalization.
 - `docs/text-preprocessing.md`: server-side TTS sanitizer.
+- `src/cpp/tests/test_text_sanitizer.cpp`: functional sanitizer coverage for URLs, emails, markup, code, emojis and invalid UTF-8.
 - `docs/markup-tts.md`: local multi-voice markup.
 - `neo-docs/neo-format.md`: `.neo` package format.
 

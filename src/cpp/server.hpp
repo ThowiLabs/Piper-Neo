@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "piper.hpp"
+#include "piper/types.hpp"
 
 namespace piper_server {
 

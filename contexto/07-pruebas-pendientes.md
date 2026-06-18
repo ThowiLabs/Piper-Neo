@@ -21,6 +21,10 @@ Pruebas actuales:
 script/smoke-text-normalizer.py
 script/smoke-project-structure.py
 cmake -S . -B build -DPIPER_BUILD_TESTS=OFF
+cmake -S . -B build-tests -DPIPER_BUILD_TESTS=ON
+cmake --build build-tests --target test_neo_package
+cmake --build build-tests --target test_text_sanitizer
+ctest --test-dir build-tests -R "test_neo_package|test_text_sanitizer" --output-on-failure
 ```
 
 Pruebas futuras deberían vivir en `script/` o como tests C++ opcionales.
@@ -36,25 +40,31 @@ Pruebas futuras deberían vivir en `script/` o como tests C++ opcionales.
 - `script/smoke-text-normalizer.py`
 - `script/smoke-project-structure.py`
 - `src/cpp/test.cpp`
+- `src/cpp/tests/test_neo_package.cpp`
+- `src/cpp/tests/test_text_sanitizer.cpp`
+- `CMakeLists.txt`
 
 # Problemas encontrados
 
 - La síntesis real depende de modelos externos que no deben subirse al repo.
-- Las pruebas actuales no cubren paquetes `.neo`, parser HTTP ni chunking profundo.
+- Antes no había una prueba funcional de paquetes `.neo`.
+- Todavía no hay cobertura de parser HTTP ni chunking profundo. El sanitizer ya tiene una prueba C++ mínima.
 
 # Soluciones implementadas
 
 - Se dejaron modelos reales fuera del repo y `models/.gitkeep` como placeholder.
 - Se agregaron smoke checks sin dependencias pesadas.
+- Se agregó `test_neo_package`, prueba C++ opcional que crea un `.neo` mínimo, lo inspecciona, lee imagen y extrae modelo/config sin requerir ONNX real.
+- Se agregó `test_text_sanitizer`, prueba C++ opcional para texto plano, URL, correo, HTML, markdown, código, emojis, texto largo e UTF-8 inválido.
 
 # Pendientes
 
-- Test `.neo`: exportar, inspeccionar, extraer y validar metadata.
+- Test `.neo`: ampliar cobertura a exportación zstd/no-zstd cuando zstd esté disponible.
 - Test chunking: signos españoles, URLs, decimales, abreviaturas y saltos de línea.
 - Test HTTP parser: GET, POST, query params, body grande y headers malformados.
-- Test sanitizer: texto normal, código, URLs largas, emojis, input vacío e input enorme.
+- Test sanitizer: ampliar cobertura con payloads HTTP reales e inputs mixtos de usuarios.
 - Test funcional con modelo real local no versionado.
 
 # Próximos pasos
 
-Agregar tests de `.neo` y chunking antes del siguiente refactor grande.
+Agregar tests de chunking y HTTP parser antes de refactorizar más esos módulos; para sanitizer ya existe cobertura mínima.

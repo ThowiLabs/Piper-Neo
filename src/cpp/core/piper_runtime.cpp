@@ -1,4 +1,4 @@
-#include "piper.hpp"
+#include "piper/api.hpp"
 
 #include <espeak-ng/speak_lib.h>
 #include <spdlog/spdlog.h>

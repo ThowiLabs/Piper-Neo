@@ -93,10 +93,6 @@ private:
   std::size_t waitingJobs = 0;
 };
 
-json resourcePolicyJson(const ServerOptions &options, const FairTtsScheduler &scheduler);
-json metricsJson(const ServerMetrics &metrics, const FairTtsScheduler &scheduler,
-                 const ServerOptions &options);
-
 } // namespace piper_server
 
 #endif // PIPER_SERVER_TTS_SCHEDULER_H_

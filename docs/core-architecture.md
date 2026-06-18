@@ -22,6 +22,7 @@ src/cpp/app/
 src/cpp/server.cpp
 src/cpp/server/
 src/cpp/piper.hpp
+src/cpp/piper/
 src/cpp/piper.cpp
 src/cpp/core/
 src/cpp/text_normalizer.cpp
@@ -76,7 +77,15 @@ sentence_splitter.hpp   Contrato interno para pausas explícitas.
 sentence_splitter.cpp   Detección de oración, abreviaturas, decimales y versiones.
 ```
 
-`src/cpp/piper.cpp` queda mínimo y conserva solo `getVersion()`. El contrato público sigue en `piper.hpp`, así que CLI, servidor y tests no cambian su forma de integración.
+`src/cpp/piper.cpp` queda mínimo y conserva solo `getVersion()`. El contrato público mantiene compatibilidad por `piper.hpp`, pero internamente se separó en:
+
+```text
+piper.hpp           Fachada pública compatible.
+piper/types.hpp     Tipos públicos: configuración, voz, síntesis y sesión.
+piper/api.hpp       Funciones públicas: runtime, carga de voz, chunking y síntesis.
+```
+
+Los módulos internos nuevos deben incluir `piper/types.hpp` o `piper/api.hpp` directamente para evitar depender de una cabecera monolítica.
 
 ## `src/cpp/server.cpp`
 
@@ -99,10 +108,16 @@ http.*                  Socket portable, request parser, rutas, respuestas HTTP 
 auth.*                  Bearer token y X-API-Token.
 request_handler.*       Routing HTTP de una conexión y validaciones por endpoint.
 responses.*             Respuestas JSON y mapeo de errores.
-text_sanitizer.*        Limpieza segura de texto antes de síntesis API.
+text_sanitizer.*        Orquestador público de limpieza segura antes de síntesis API.
+sanitize_result.*       Resultado y warnings únicos de sanitización.
+sanitize/utf8_text.*    UTF-8 estricto, Unicode, emojis, whitespace y recorte.
+sanitize/content_filters.* HTML, BBCode, markdown, código, alta entropía, URLs y correos.
+sanitize/risk_score.*   Cálculo de riesgo por warnings de sanitización.
 model_registry.*        Escaneo, listado y metadatos de modelos.
 model_cache.*           Réplicas de modelos y leases de voces.
-tts_scheduler.*         Cola justa, concurrencia, métricas y ensamblado de WAV.
+tts_scheduler.*         Cola justa, concurrencia y workers de síntesis.
+metrics_report.*        Reportes JSON de política de recursos y métricas.
+jobs/chunked_wav.*      Ensamblado de WAV desde chunks RAW temporales.
 markup_tts.*            Parser de markup TTS, silencios y mezcla de segmentos.
 wav_utils.*             Lectura/escritura WAV PCM y resampling lineal simple.
 output_cleanup.*        Limpieza de temporales y retención de outputs.
@@ -161,12 +176,13 @@ Esta separación evita que el formato `.neo` vuelva a mezclar parsing binario, c
 2. `request_handler.*` lee, autoriza y enruta la petición.
 3. `auth.*` valida token si está configurado.
 4. `markup_tts.*` detecta si el texto usa markup TTS.
-5. `text_sanitizer.*` limpia texto plano o segmentos.
+5. `text_sanitizer.*` coordina `sanitize/*` para limpiar texto plano o segmentos y calcular riesgo.
 6. `tts_scheduler.*` divide trabajo en chunks y administra cola/concurrencia.
 7. `model_cache.*` entrega una voz disponible o carga réplica del modelo.
-8. `piper.hpp`/`src/cpp/core/` ejecutan normalización, fonemización e inferencia.
-9. `wav_utils.*` ensambla audio WAV de la API.
-10. `request_handler.*` responde JSON con la URL del archivo generado.
+8. `piper/api.hpp` y `src/cpp/core/` ejecutan normalización, fonemización e inferencia.
+9. `jobs/chunked_wav.*` ensambla los chunks RAW en un WAV final.
+10. `metrics_report.*` expone métricas y política de recursos como JSON.
+11. `request_handler.*` responde JSON con la URL del archivo generado.
 
 ## Límites conservados
 
@@ -184,6 +200,9 @@ python3 script/smoke-text-normalizer.py
 python3 script/smoke-project-structure.py
 cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer" --output-on-failure
 ```
 
 ## Pendientes recomendados
@@ -192,6 +211,6 @@ cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
 - Probar síntesis real con `.onnx` y `.neo`.
 - Probar `--output_raw`, WAV normal y stdin largo.
 - Agregar smoke tests HTTP para `/api/health`, `/api/v1/models`, `/api/v1/tts` y archivos.
-- Agregar pruebas funcionales de `.neo`: exportar, inspeccionar, extraer e imagen embebida.
+- Ampliar pruebas funcionales de `.neo` para cubrir export zstd real cuando zstd esté disponible.
 - Separar `request_handler.*` por endpoint solo si crecen rutas o pruebas HTTP.
 - Evaluar CMake moderno por targets si se decide tocar el sistema de build con más calma.

@@ -42,21 +42,37 @@ Solución implementada: la exportación `.neo`, carga de runtime/voz, modo servi
 
 Solución implementada: la ayuda CLI vive en `help_text.*`, la validación cruzada/rutas vive en `cli_validation.*` y `cli_args.cpp` queda enfocado en convertir flags a `RunConfig`.
 
+### 10. `piper.hpp` seguía actuando como cabecera monolítica
+
+Solución implementada: `piper.hpp` queda como fachada compatible; los tipos públicos viven en `piper/types.hpp` y las funciones públicas en `piper/api.hpp`.
+
+### 11. `tts_scheduler.cpp` mezclaba cola, reportes y ensamblado WAV
+
+Solución implementada: los reportes JSON viven en `server/metrics_report.*` y el ensamblado de chunks RAW a WAV vive en `server/jobs/chunked_wav.*`.
+
+### 12. Faltaba prueba funcional mínima de `.neo`
+
+Solución implementada: se agregó `test_neo_package`, que genera un `.neo` mínimo sin modelo ONNX real, lo inspecciona, lee su imagen y extrae modelo/config.
+
+### 13. `text_sanitizer.cpp` mezclaba demasiadas reglas de entrada API
+
+Solución implementada: el sanitizador se separó en `server/sanitize_result.*` y módulos bajo `server/sanitize/` para UTF-8/Unicode, filtros de contenido y cálculo de riesgo. También se agregó `test_text_sanitizer`.
+
 ## Deuda técnica restante
 
 ### Alta prioridad
 
-1. `src/cpp/neo_model.cpp`: ya quedó como fachada; seguir con pruebas funcionales de `.neo`.
-2. `src/cpp/piper.hpp`: reducir includes pesados con una fachada compatible.
-3. `src/cpp/app/synthesis_mode.cpp`: agregar pruebas de stdin, JSON input, output WAV y RAW.
-4. Pruebas CLI: validar combinaciones de flags, `--help`, `--version`, `--server` y export `.neo`.
+1. `src/cpp/app/synthesis_mode.cpp`: agregar pruebas de stdin, JSON input, output WAV y RAW.
+2. Pruebas CLI: validar combinaciones de flags, `--help`, `--version`, `--server` y export `.neo`.
+3. `.neo`: ampliar prueba para export zstd real cuando zstd esté disponible.
+4. Server: agregar smoke HTTP para health, modelos, TTS y descarga de archivos.
 
 ### Prioridad media
 
-1. `src/cpp/server/tts_scheduler.cpp`: separar cola, estado, workers, métricas y ensamblado.
+1. `src/cpp/server/tts_scheduler.cpp`: seguir separando estado/job runner si crece la concurrencia.
 2. `src/cpp/server/markup_tts.cpp`: separar parser, validación, render y mezcla WAV.
-3. `src/cpp/server/text_sanitizer.cpp`: separar detectores y risk score.
-4. `src/cpp/server/request_handler.cpp`: separar rutas si el API crece.
+3. `src/cpp/server/request_handler.cpp`: separar rutas si el API crece.
+4. `src/cpp/server/text_sanitizer.cpp`: ya está modular; ampliar pruebas con payloads HTTP reales.
 
 ### Prioridad baja
 
@@ -66,12 +82,12 @@ Solución implementada: la ayuda CLI vive en `help_text.*`, la validación cruza
 
 ## Pruebas recomendadas antes de más refactor
 
-- `.neo`: exportar, leer, extraer metadata, extraer imagen y validar zstd/no-zstd.
+- `.neo`: ya existe prueba mínima sin compresión; falta validar export zstd/no-zstd con zstd real.
 - Chunking: textos largos, signos `¿?`, `¡!`, URLs, decimales, abreviaturas y saltos de línea.
 - HTTP: GET, POST, query params, payload grande, headers malformados.
-- Sanitizer: texto normal, código, URLs largas, emoji, input vacío e input enorme.
+- Sanitizer: `test_text_sanitizer` ya cubre texto normal, código, URLs/correos, markup, markdown, emoji, input enorme e UTF-8 inválido; falta probar integración HTTP.
 - Audio real: `.onnx`, `.neo`, `--output_raw`, stdin largo y servidor local.
 
 ## Estado recomendado
 
-El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación y la limpieza de CLI ya fueron aplicados; el siguiente paso recomendable es agregar pruebas funcionales del formato `.neo` y pruebas pequeñas de CLI antes de tocar más runtime.
+El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación y la limpieza de CLI ya fueron aplicados; el siguiente paso recomendable es agregar pruebas pequeñas de CLI/HTTP y continuar con `markup_tts.cpp` con cobertura específica.

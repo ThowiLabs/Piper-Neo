@@ -251,6 +251,10 @@ docker compose -f docker-compose-cli.yml build
 python3 script/smoke-text-normalizer.py
 python3 script/smoke-project-structure.py
 cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
+cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer" --output-on-failure
 ```
 
 ## Arquitectura interna C++
@@ -259,9 +263,11 @@ El core C++ está dividido por responsabilidades:
 
 - `src/cpp/main.cpp`: punto de entrada mínimo.
 - `src/cpp/app/`: parsing CLI, ayuda, validación, configuración, detección de hardware, entorno y modos de ejecución CLI/server/export/síntesis.
+- `src/cpp/piper.hpp` y `src/cpp/piper/`: fachada pública compatible, tipos públicos y API del motor.
 - `src/cpp/core/`: runtime Piper, carga de voz, inferencia ONNX, chunking, pipeline de síntesis y escritura WAV.
 - `src/cpp/server.cpp`: runtime del servidor local, sockets y loop de aceptación.
-- `src/cpp/server/`: HTTP, auth, routing, sanitización, modelos, caché, scheduler TTS, markup TTS, WAV y limpieza.
+- `src/cpp/server/`: HTTP, auth, routing, sanitización, modelos, caché, scheduler TTS, métricas, markup TTS, WAV, jobs y limpieza.
+- `src/cpp/server/sanitize/`: lógica interna del sanitizer API para UTF-8/Unicode, filtros de contenido y cálculo de riesgo.
 - `src/cpp/text_normalizer.cpp` y `src/cpp/text/`: normalización configurable por modelo.
 - `src/cpp/neo_model.cpp` y `src/cpp/neo/`: fachada pública y módulos internos para lectura, inspección, extracción y escritura de paquetes `.neo`.
 

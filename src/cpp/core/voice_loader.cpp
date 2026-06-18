@@ -1,4 +1,4 @@
-#include "piper.hpp"
+#include "piper/api.hpp"
 
 #include "core/model_runtime.hpp"
 
@@ -152,7 +152,7 @@ Phoneme getCodepoint(std::string s) {
 
 void loadVoice(PiperConfig &config, std::string modelPath,
                std::string modelConfigPath, Voice &voice,
-               std::optional<SpeakerId> &speakerId, bool useCuda,
+               const std::optional<SpeakerId> &speakerId, bool useCuda,
                std::optional<int> cpuThreads) {
   spdlog::debug("Parsing voice config at {}", modelConfigPath);
   std::ifstream modelConfigFile(modelConfigPath);

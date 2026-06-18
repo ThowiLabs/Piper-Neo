@@ -1,4 +1,4 @@
-#include "piper.hpp"
+#include "piper/api.hpp"
 
 #include "core/model_runtime.hpp"
 #include "core/sentence_splitter.hpp"

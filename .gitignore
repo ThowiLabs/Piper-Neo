@@ -1,0 +1,89 @@
+.DS_Store
+.idea/
+.vscode/
+*.log
+tmp/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python caches/tooling
+*.py[cod]
+*.egg
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.cache/
+.venv/
+lightning_logs/
+
+# CMake / native local builds
+build/
+build-*/
+cmake-build-*/
+install/
+dist/
+lib/
+local/
+download/
+_deps/
+Testing/
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+install_manifest.txt
+compile_commands.json
+CMakeUserPresets.json
+
+# Ninja / Make local state
+.ninja_deps
+.ninja_log
+*.ninja
+Makefile.local
+
+# Native compiler outputs
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.def
+*.dSYM/
+
+# Runtime/server outputs
+outputs/
+outputs/tmp/
+
+# Local downloaded voices/models; keep the placeholder directory only
+models/*
+!models/.gitkeep
+
+# Optional sample model removed from source packages to keep the repository light
+etc/test_voice.onnx
+etc/test_voice.onnx.json
+
+# Windows local builds / generated packages
+build-winlibs/
+dist-winlibs/
+build-msvc/
+dist-msvc/
+build-windows/
+dist-windows/
+build-winlibs-patch.cmake
+
+# Local generated patches/backups
+*.patch.local
+*.rej
+*.orig
+*.neo-backup

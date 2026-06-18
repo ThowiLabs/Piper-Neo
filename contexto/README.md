@@ -1,0 +1,56 @@
+# Fecha
+
+18 de junio de 2026
+
+# Objetivo
+
+Índice del contexto técnico actual de Piper Neo para mantener el repo público sin arrastrar historial viejo, apps externas ni archivos residuales.
+
+# Decisiones tomadas
+
+- El repo público queda enfocado en el motor Piper Neo.
+- La carpeta `apps/` fue eliminada.
+- El contexto anterior fue reemplazado por archivos actuales y coherentes.
+- El workflow de release/build de GitHub trabaja explícitamente desde `main`.
+- Los modelos reales, outputs y builds locales quedan ignorados.
+
+# Arquitectura actual
+
+Leer en este orden:
+
+1. `01-contexto-inicial-publico.md`
+2. `02-arquitectura-core-cpp.md`
+3. `03-servidor-api-tts.md`
+4. `04-normalizacion-texto.md`
+5. `05-paquetes-neo.md`
+6. `06-build-workflow.md`
+7. `07-pruebas-pendientes.md`
+
+# Librerías usadas
+
+Las mismas del proyecto: C++17, fmt, spdlog, piper-phonemize, espeak-ng, ONNX Runtime, zstd opcional y nlohmann/json vendorizado.
+
+# Archivos importantes modificados
+
+- `README.md`
+- `README.es.md`
+- `.gitignore`
+- `.github/workflows/main.yml`
+- `contexto/*`
+- `docs/text-preprocessing.md`
+
+# Problemas encontrados
+
+El contexto previo mezclaba refactors, errores de build ya corregidos y referencias a apps externas que no deben formar parte del repo público del motor.
+
+# Soluciones implementadas
+
+Se reinició `contexto/` como documentación de estado actual, no como historial de conversación.
+
+# Pendientes
+
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas.
+
+# Próximos pasos
+
+Probar el ZIP limpio, subirlo a un repo público inicial y validar el workflow manual de release desde `main`.

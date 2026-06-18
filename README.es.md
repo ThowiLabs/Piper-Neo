@@ -258,7 +258,7 @@ cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 El core C++ está dividido por responsabilidades:
 
 - `src/cpp/main.cpp`: punto de entrada mínimo.
-- `src/cpp/app/`: parsing CLI, configuración, detección de hardware, entorno y modos de ejecución CLI/server/export/síntesis.
+- `src/cpp/app/`: parsing CLI, ayuda, validación, configuración, detección de hardware, entorno y modos de ejecución CLI/server/export/síntesis.
 - `src/cpp/core/`: runtime Piper, carga de voz, inferencia ONNX, chunking, pipeline de síntesis y escritura WAV.
 - `src/cpp/server.cpp`: runtime del servidor local, sockets y loop de aceptación.
 - `src/cpp/server/`: HTTP, auth, routing, sanitización, modelos, caché, scheduler TTS, markup TTS, WAV y limpieza.

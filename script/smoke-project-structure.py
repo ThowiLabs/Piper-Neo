@@ -38,6 +38,10 @@ REQUIRED_FILES = [
     "src/cpp/app/synthesis_mode.hpp",
     "src/cpp/app/voice_runtime.cpp",
     "src/cpp/app/voice_runtime.hpp",
+    "src/cpp/app/cli_validation.cpp",
+    "src/cpp/app/cli_validation.hpp",
+    "src/cpp/app/help_text.cpp",
+    "src/cpp/app/help_text.hpp",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -56,6 +60,8 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/neo/package_reader.cpp",
     "src/cpp/neo/package_writer.cpp",
     "src/cpp/neo_model.cpp",
+    "src/cpp/app/cli_validation.cpp",
+    "src/cpp/app/help_text.cpp",
     "src/cpp/app/export_neo_mode.cpp",
     "src/cpp/app/server_mode.cpp",
     "src/cpp/app/synthesis_mode.cpp",
@@ -74,6 +80,7 @@ EXPECTED_CONTEXT = {
     "08-refactor-paquetes-neo.md",
     "09-restauracion-workflow-release.md",
     "10-refactor-modos-app-core.md",
+    "11-refactor-cli-args.md",
 }
 
 
@@ -101,6 +108,17 @@ def main() -> None:
     neo_model_lines = (ROOT / "src/cpp/neo_model.cpp").read_text(encoding="utf-8").splitlines()
     if len(neo_model_lines) > 140:
         fail(f"src/cpp/neo_model.cpp volvió a concentrar demasiada lógica: {len(neo_model_lines)} líneas")
+
+    cli_args_lines = (ROOT / "src/cpp/app/cli_args.cpp").read_text(encoding="utf-8").splitlines()
+    if len(cli_args_lines) > 280:
+        fail(f"src/cpp/app/cli_args.cpp volvió a concentrar help/validación: {len(cli_args_lines)} líneas")
+
+    for app_source in [
+        "src/cpp/app/cli_validation.cpp",
+        "src/cpp/app/help_text.cpp",
+    ]:
+        if app_source not in cmake:
+            fail(f"CMakeLists.txt no referencia módulo app: {app_source}")
 
     for source in [
         "src/cpp/neo/binary_io.cpp",

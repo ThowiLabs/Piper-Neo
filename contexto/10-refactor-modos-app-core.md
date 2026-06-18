@@ -23,7 +23,9 @@ La capa `src/cpp/app/` queda organizada así:
 
 ```text
 piper_app.*             Entrada de aplicación y selección de modo.
-cli_args.*              Parsing y validación de argumentos.
+cli_args.*              Parser de argumentos y asignación directa a RunConfig.
+help_text.*             Texto de ayuda visible para usuario.
+cli_validation.*        Validación cruzada, rutas y resolución final de modelo/config.
 run_config.hpp          Configuración común de ejecución.
 export_neo_mode.*       Exportación de ONNX/config/imagen a paquete `.neo`.
 voice_runtime.*         Carga de modelo/voz y configuración de eSpeak/tashkeel.
@@ -71,7 +73,7 @@ Se separaron los modos por responsabilidad real y `piper_app.cpp` quedó como se
 
 # Pendientes
 
-- Separar `cli_args.cpp` en help text, parser y validación.
+- Agregar pruebas funcionales de CLI para help, version, síntesis, server y export `.neo`.
 - Agregar pruebas funcionales para `.neo`.
 - Agregar pruebas pequeñas de parsing de CLI sin requerir ONNX.
 - Continuar después con `server/tts_scheduler.cpp` o `server/text_sanitizer.cpp`.

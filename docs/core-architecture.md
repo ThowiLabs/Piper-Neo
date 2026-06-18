@@ -44,7 +44,9 @@ Contiene la capa de aplicación CLI:
 
 ```text
 run_config.hpp          Configuración de ejecución.
-cli_args.*              Parsing y validación de argumentos.
+cli_args.*              Parser de argumentos y asignación directa a RunConfig.
+help_text.*             Ayuda CLI y opciones visibles para usuario.
+cli_validation.*        Validación cruzada, rutas, modo servidor y resolución de modelo/config.
 hardware.*              Detección de CPU, memoria y límites cgroup.
 env.*                   Resolución de token desde argumento, entorno o .env.
 platform.*              Detalles del ejecutable y consola por plataforma.
@@ -140,7 +142,7 @@ Esta separación evita que el formato `.neo` vuelva a mezclar parsing binario, c
 
 ## Flujo de síntesis CLI/WAV
 
-1. `app/piper_app.*` parsea argumentos y selecciona modo.
+1. `app/cli_args.*` parsea flags, `app/cli_validation.*` valida rutas/configuración y `app/piper_app.*` selecciona modo.
 2. `app/voice_runtime.*` prepara la voz, eSpeak/tashkeel y aplica overrides.
 3. `app/synthesis_mode.*` resuelve entrada/salida: stdin, texto directo, archivo, JSON, WAV o RAW.
 4. `loadVoice()` lee config JSON y carga el modelo mediante `core/model_runtime.*`.

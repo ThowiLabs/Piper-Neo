@@ -5,7 +5,6 @@
 
 namespace piper_app {
 
-void printUsage(char *argv[]);
 void parseArgs(int argc, char *argv[], RunConfig &runConfig);
 
 } // namespace piper_app

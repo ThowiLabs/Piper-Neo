@@ -29,6 +29,7 @@ Leer en este orden:
 8. `08-refactor-paquetes-neo.md`
 9. `09-restauracion-workflow-release.md`
 10. `10-refactor-modos-app-core.md`
+11. `11-refactor-cli-args.md`
 
 # Librerías usadas
 
@@ -56,8 +57,8 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública y los modos de aplicación CLI viven en módulos específicos bajo `src/cpp/app/`.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/` y los argumentos separan parser, ayuda y validación.
 
 # Próximos pasos
 
-Probar el build real de Windows después del refactor de modos CLI y agregar pruebas funcionales de empaquetado/inspección/extracción `.neo`.
+Probar el build real de Windows después del refactor de CLI y agregar pruebas funcionales de empaquetado/inspección/extracción `.neo`.

@@ -1,9 +1,10 @@
 #include "cli_args.hpp"
-#include "hardware.hpp"
+
+#include "cli_validation.hpp"
+#include "help_text.hpp"
 
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
@@ -11,116 +12,13 @@
 
 #include <spdlog/spdlog.h>
 
-#include "../neo_model.hpp"
 #include "../piper.hpp"
-#include "../server.hpp"
 
 namespace piper_app {
 
 using namespace std;
 
-void printUsage(char *argv[]) {
-  cerr << endl;
-  cerr << "usage: " << argv[0] << " [options]" << endl;
-  cerr << endl;
-  cerr << "options:" << endl;
-  cerr << "   -h        --help              show this message and exit" << endl;
-  cerr << "   -m  FILE  --model       FILE  path to onnx model file" << endl;
-  cerr << "   -c  FILE  --config      FILE  path to model config file "
-          "(default: model path + .json)"
-       << endl;
-  cerr << "   -f  FILE  --output_file FILE  path to output WAV file ('-' for "
-          "stdout)"
-       << endl;
-  cerr << "   -d  DIR   --output_dir  DIR   path to output directory (default: "
-          "cwd)"
-       << endl;
-  cerr << "   --output_raw                  output raw audio to stdout as it "
-          "becomes available"
-       << endl;
-  cerr << "   -s  NUM   --speaker     NUM   id of speaker (default: 0)" << endl;
-  cerr << "   --noise_scale           NUM   generator noise (default: 0.667)"
-       << endl;
-  cerr << "   --length_scale          NUM   phoneme length (default: 1.0)"
-       << endl;
-  cerr << "   --noise_w               NUM   phoneme width noise (default: 0.8)"
-       << endl;
-  cerr << "   --sentence_silence      NUM   seconds of silence after each "
-          "sentence or line break (default: 0.35)"
-       << endl;
-  cerr << "   --espeak_data           DIR   path to espeak-ng data directory"
-       << endl;
-  cerr << "   --tashkeel_model        FILE  path to libtashkeel onnx model "
-          "(arabic)"
-       << endl;
-  cerr << "   --text                  TEXT  synthesize a direct text payload"
-       << endl;
-  cerr << "   --input_file            FILE  read text from a UTF-8 text file"
-       << endl;
-  cerr << "   --json-input                  stdin input is lines of JSON "
-          "instead of plain text"
-       << endl;
-  cerr << "   --server                      start local HTTP API server" << endl;
-  cerr << "   --serve                       alias for --server" << endl;
-  cerr << "   --host                  IP    server host (default: 127.0.0.1)"
-       << endl;
-  cerr << "   --port                  NUM   server port (default: 8080)"
-       << endl;
-  cerr << "   --models                DIR   models directory for server mode "
-          "(default: models/)"
-       << endl;
-  cerr << "   --api-token             TOKEN protect API server with bearer token"
-       << endl;
-  cerr << "                                env/.env: PIPER_API_TOKEN" << endl;
-  cerr << "   --cpu-profile           NAME  auto resource profile: auto, eco, "
-          "balanced, fast, max (server default: auto)"
-       << endl;
-  cerr << "   --max-concurrent-jobs   NUM   max accepted simultaneous API jobs "
-          "(default: auto)"
-       << endl;
-  cerr << "   --chunk-workers         NUM   fair chunk worker count "
-          "(default: auto)"
-       << endl;
-  cerr << "   --max-model-replicas    NUM   max ONNX replicas per model "
-          "(default: auto)"
-       << endl;
-  cerr << "   --queue-size            NUM   max waiting/active API jobs "
-          "(default: auto)"
-       << endl;
-  cerr << "   --queue-timeout-seconds NUM   seconds a job may wait in queue "
-          "(default: 60)"
-       << endl;
-  cerr << "   --max-temp-bytes       NUM   max temporary RAW audio bytes "
-          "(default: auto from memory/cgroup)"
-       << endl;
-  cerr << "   --output-retention-seconds NUM seconds generated API WAV files stay "
-          "available (default: 3600)"
-       << endl;
-  cerr << "   --models-refresh-seconds NUM seconds to cache /models metadata "
-          "(default: 30)"
-       << endl;
-  cerr << "   --export-neo            FILE export --model/--config into a Piper Neo .neo package"
-       << endl;
-  cerr << "   --neo-image             FILE optional cover image for --export-neo"
-       << endl;
-  cerr << "   --neo-compression-level NUM  zstd compression level for .neo export "
-          "(default: 10)"
-       << endl;
-  cerr << "   --max-input-bytes       NUM   max API/direct input bytes "
-          "(default: 10485760)"
-       << endl;
-  cerr << "   --use-cuda                    use CUDA execution provider"
-       << endl;
-  cerr << "   --cpu-threads           NUM   limit ONNX Runtime CPU threads"
-       << endl;
-  cerr << "   --max-text-chunk-bytes  NUM   preferred smart chunk size before "
-          "synthesis (default: 4096)"
-       << endl;
-  cerr << "   --debug                       print DEBUG messages to the console"
-       << endl;
-  cerr << "   -q       --quiet              disable logging" << endl;
-  cerr << endl;
-}
+namespace {
 
 void ensureArg(int argc, char *argv[], int argi) {
   if ((argi + 1) >= argc) {
@@ -129,7 +27,8 @@ void ensureArg(int argc, char *argv[], int argi) {
   }
 }
 
-// Parse command-line arguments
+} // namespace
+
 void parseArgs(int argc, char *argv[], RunConfig &runConfig) {
   optional<filesystem::path> modelConfigPath;
 
@@ -345,84 +244,7 @@ void parseArgs(int argc, char *argv[], RunConfig &runConfig) {
     }
   }
 
-  if (runConfig.inputText && runConfig.inputFilePath) {
-    throw runtime_error("Use either --text or --input-file, not both");
-  }
-
-  if (runConfig.inputFilePath) {
-    ifstream inputFile(runConfig.inputFilePath->c_str(), ios::binary);
-    if (!inputFile.good()) {
-      throw runtime_error("Input text file doesn't exist");
-    }
-  }
-
-  if (runConfig.serverMode) {
-    // Be forgiving: many users naturally pass a models folder with --model.
-    // In server mode, a directory supplied to --model is treated as --models.
-    if (!runConfig.modelPath.empty() && filesystem::is_directory(runConfig.modelPath)) {
-      runConfig.modelsDir = runConfig.modelPath;
-      runConfig.modelPath.clear();
-      modelConfigPath.reset();
-    }
-
-    filesystem::create_directories(runConfig.modelsDir);
-
-    if (runConfig.modelPath.empty()) {
-      auto maybeModel = piper_server::findFirstUsableModel(runConfig.modelsDir);
-      if (maybeModel) {
-        runConfig.modelPath = maybeModel->modelPath;
-        if (!modelConfigPath && !maybeModel->isNeo) {
-          modelConfigPath = maybeModel->configPath;
-        }
-      } else {
-        throw runtime_error(
-            "No usable .onnx/.neo model found in models directory: " +
-            runConfig.modelsDir.string() +
-            ". Copy a .neo file or a .onnx file with its .onnx.json config, "
-            "or pass --models DIR / --model FILE.");
-      }
-    } else if (!filesystem::exists(runConfig.modelPath)) {
-      auto modelInModelsDir = runConfig.modelsDir / runConfig.modelPath;
-      if (filesystem::exists(modelInModelsDir)) {
-        runConfig.modelPath = modelInModelsDir;
-      }
-    }
-  }
-
-  if (runConfig.serverMode) {
-    applyAutoServerResourceConfig(runConfig);
-  }
-
-  if (runConfig.modelPath.empty()) {
-    throw runtime_error("Model file is required. Use --model FILE");
-  }
-
-  // Verify model file exists
-  ifstream modelFile(runConfig.modelPath.c_str(), ios::binary);
-  if (!modelFile.good()) {
-    throw runtime_error("Model file doesn't exist");
-  }
-
-  if (piper_neo::isNeoFile(runConfig.modelPath)) {
-    runConfig.modelConfigPath.clear();
-  } else if (!modelConfigPath) {
-    runConfig.modelConfigPath =
-        filesystem::path(runConfig.modelPath.string() + ".json");
-  } else {
-    runConfig.modelConfigPath = modelConfigPath.value();
-  }
-
-  // Verify model config exists for the classic .onnx format. .neo embeds it.
-  if (!piper_neo::isNeoFile(runConfig.modelPath)) {
-    ifstream modelConfigFile(runConfig.modelConfigPath.c_str());
-    if (!modelConfigFile.good()) {
-      throw runtime_error("Model config doesn't exist");
-    }
-  }
-
-  if (runConfig.exportNeoPath && piper_neo::isNeoFile(runConfig.modelPath)) {
-    throw runtime_error("--export-neo expects a classic .onnx model plus .onnx.json config");
-  }
+  finalizeRunConfig(runConfig, modelConfigPath);
 }
 
 } // namespace piper_app

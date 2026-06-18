@@ -258,7 +258,7 @@ cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 The C++ core is split by responsibility:
 
 - `src/cpp/main.cpp`: minimal binary entry point.
-- `src/cpp/app/`: CLI parsing, run configuration, hardware detection, environment resolution and execution modes for CLI/server/export/synthesis.
+- `src/cpp/app/`: CLI parsing, help text, validation, run configuration, hardware detection, environment resolution and execution modes for CLI/server/export/synthesis.
 - `src/cpp/core/`: Piper runtime, voice loading, ONNX inference, chunking, synthesis pipeline and WAV streaming.
 - `src/cpp/server.cpp`: local HTTP server runtime, sockets and accept loop.
 - `src/cpp/server/`: HTTP, auth, request routing, text sanitization, models, cache, TTS scheduler, markup TTS, WAV and cleanup modules.

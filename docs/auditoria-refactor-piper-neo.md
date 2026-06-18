@@ -38,14 +38,18 @@ Solución implementada: se eliminó `apps/`, se limpió `.gitignore`, se reescri
 
 Solución implementada: la exportación `.neo`, carga de runtime/voz, modo servidor y síntesis CLI/stdin/JSON/RAW quedaron separados en módulos específicos bajo `src/cpp/app/`.
 
+### 9. `cli_args.cpp` mezclaba ayuda, parsing y validación
+
+Solución implementada: la ayuda CLI vive en `help_text.*`, la validación cruzada/rutas vive en `cli_validation.*` y `cli_args.cpp` queda enfocado en convertir flags a `RunConfig`.
+
 ## Deuda técnica restante
 
 ### Alta prioridad
 
 1. `src/cpp/neo_model.cpp`: ya quedó como fachada; seguir con pruebas funcionales de `.neo`.
 2. `src/cpp/piper.hpp`: reducir includes pesados con una fachada compatible.
-3. `src/cpp/app/cli_args.cpp`: separar help text, parser y validación.
-4. `src/cpp/app/synthesis_mode.cpp`: agregar pruebas de stdin, JSON input, output WAV y RAW.
+3. `src/cpp/app/synthesis_mode.cpp`: agregar pruebas de stdin, JSON input, output WAV y RAW.
+4. Pruebas CLI: validar combinaciones de flags, `--help`, `--version`, `--server` y export `.neo`.
 
 ### Prioridad media
 
@@ -70,4 +74,4 @@ Solución implementada: la exportación `.neo`, carga de runtime/voz, modo servi
 
 ## Estado recomendado
 
-El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo` y la separación de modos de aplicación ya fueron aplicados; el siguiente paso recomendable es agregar pruebas funcionales del formato `.neo` y pruebas pequeñas de CLI antes de tocar más runtime.
+El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación y la limpieza de CLI ya fueron aplicados; el siguiente paso recomendable es agregar pruebas funcionales del formato `.neo` y pruebas pequeñas de CLI antes de tocar más runtime.

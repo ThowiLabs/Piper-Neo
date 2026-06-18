@@ -37,6 +37,8 @@ endif()
 
 set(PIPER_APP_SOURCES
   src/cpp/app/cli_args.cpp
+  src/cpp/app/cli_validation.cpp
+  src/cpp/app/help_text.cpp
   src/cpp/app/env.cpp
   src/cpp/app/export_neo_mode.cpp
   src/cpp/app/hardware.cpp

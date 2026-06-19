@@ -124,3 +124,22 @@ La solución serializa solo la sección global de eSpeak/tashkeel y evita cargas
 - `src/cpp/core/pipeline/phrase_synthesizer.*`: división por silencios de fonemas, conversión a IDs, inferencia por frases y logs de fonemas faltantes.
 
 Pendiente: validar audio real con `.onnx`, `.neo`, textos largos, `--output_raw` y stress API concurrente después de compilar el binario Windows.
+
+## Avance posterior: WAV streaming y media utils
+
+- `src/cpp/core/wav_stream_writer.cpp`: reducido a orquestador de WAV normal y WAV desde stdin/stream.
+- `src/cpp/core/wav/wav_header_writer.*`: extrae header RIFF/WAVE temporal, validación de límite 4 GiB y parcheo final.
+- `src/cpp/core/wav/stream_chunks.*`: extrae síntesis de chunks y escritura incremental de audio.
+- `src/cpp/server/utils.cpp`: deja de contener Base64/data URI.
+- `src/cpp/server/media/base64.*`: contiene decodificación Base64.
+- `src/cpp/server/media/data_image.*`: contiene parseo de imágenes `data:image/...;base64`.
+
+Pendiente: agregar pruebas unitarias más profundas para WAV streaming sin depender de un modelo real, usando una interfaz de síntesis simulable si más adelante se justifica.
+
+## Avance posterior: request TTS
+
+- `src/cpp/server/routes/tts_routes.cpp`: deja de parsear directamente todos los campos JSON.
+- `src/cpp/server/routes/tts_request.*`: concentra validación de `text`, `model`, `default_model`, `speaker_id`, aliases de opciones y límites de entrada.
+- `src/cpp/server/routes/tts_payload.*`: concentra el payload estándar de éxito TTS.
+
+Pendiente: agregar `test_tts_request.cpp` para validar errores de request sin depender del servidor real.

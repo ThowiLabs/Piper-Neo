@@ -1,4 +1,6 @@
 #include "server/http.hpp"
+#include "server/media/base64.hpp"
+#include "server/media/data_image.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -30,6 +32,14 @@ int main() {
     assert(modelName.value() == "es_MX cortana");
     assert(!routeModelImageName("/api/v1/models/es_MX").has_value());
     assert(!routeModelImageName("/api/v1/files/es_MX/image").has_value());
+  }
+
+
+  {
+    assert(decodeBase64("SG9sYQ==") == "Hola");
+    auto image = parseDataImage("data:image/png;base64,aGVsbG8=");
+    assert(image.first == "image/png");
+    assert(image.second == "hello");
   }
 
   std::cout << "TEST_OK\n";

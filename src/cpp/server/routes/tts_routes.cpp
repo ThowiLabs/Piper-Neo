@@ -9,110 +9,26 @@
 
 #include <spdlog/spdlog.h>
 
-#include "server/markup/request_options.hpp"
 #include "server/markup_tts.hpp"
 #include "server/responses.hpp"
+#include "server/routes/tts_payload.hpp"
+#include "server/routes/tts_request.hpp"
 #include "server/text_sanitizer.hpp"
 #include "server/utils.hpp"
 
 namespace piper_server {
-
 namespace {
 
-std::optional<std::string> requestedModelFromJson(SocketHandle clientSocket, const json &input,
-                                                  bool &ok) {
-  ok = true;
-  std::optional<std::string> requestedModel;
-
-  if (input.contains("model")) {
-    if (!input["model"].is_string()) {
-      sendJson(clientSocket, 400,
-               errorResponse("invalid_request", "El campo model debe ser string."));
-      ok = false;
-      return std::nullopt;
-    }
-    requestedModel = input["model"].get<std::string>();
-  }
-
-  if (input.contains("default_model")) {
-    if (!input["default_model"].is_string()) {
-      sendJson(clientSocket, 400,
-               errorResponse("invalid_request", "El campo default_model debe ser string."));
-      ok = false;
-      return std::nullopt;
-    }
-    requestedModel = input["default_model"].get<std::string>();
-  }
-
-  return requestedModel;
-}
-
-std::optional<piper::SpeakerId> speakerIdFromJson(SocketHandle clientSocket, const json &input,
-                                                  bool &ok) {
-  ok = true;
-  if (!input.contains("speaker_id")) {
-    return std::nullopt;
-  }
-
-  if (!input["speaker_id"].is_number_integer()) {
-    sendJson(clientSocket, 400,
-             errorResponse("invalid_request", "El campo speaker_id debe ser entero."));
-    ok = false;
-    return std::nullopt;
-  }
-
-  return input["speaker_id"].get<piper::SpeakerId>();
-}
-
-bool readSynthesisOptions(SocketHandle clientSocket, const json &input,
-                          std::optional<float> &noiseScale,
-                          std::optional<float> &lengthScale,
-                          std::optional<float> &noiseW,
-                          std::optional<float> &sentenceSilenceSeconds) {
-  try {
-    noiseScale = requestFloatOption(input, {"noise_scale", "noiseScale"}, "noise_scale", 0.0f, 2.0f);
-    lengthScale = requestFloatOption(input, {"length_scale", "lengthScale"}, "length_scale", 0.05f, 10.0f);
-    noiseW = requestFloatOption(input, {"noise_w", "noiseW"}, "noise_w", 0.0f, 2.0f);
-    sentenceSilenceSeconds = requestFloatOption(input,
-                                                {"sentence_silence", "sentenceSilence",
-                                                 "sentence_silence_seconds"},
-                                                "sentence_silence", 0.0f, 30.0f);
-    return true;
-  } catch (const std::runtime_error &e) {
-    sendJson(clientSocket, 400, errorResponse("invalid_request", e.what()));
-    return false;
-  }
-}
-
-json ttsSuccessPayload(const std::string &fileName, const TtsJobResult &result,
-                       const json &markup, const json &textPreprocessing,
-                       const std::optional<std::string> &fallbackModel = std::nullopt) {
-  return json{{"file", fileName},
-              {"model", fallbackModel.value_or(result.modelName)},
-              {"url", "/api/v1/files/" + fileName},
-              {"format", "wav"},
-              {"chunks", result.chunks},
-              {"bytes", result.bytes},
-              {"audio_seconds", result.synthesis.audioSeconds},
-              {"infer_seconds", result.synthesis.inferSeconds},
-              {"real_time_factor", result.synthesis.realTimeFactor},
-              {"markup", markup},
-              {"text_preprocessing", textPreprocessing}};
-}
-
-bool handleMarkupTts(SocketHandle clientSocket, const std::string &text,
-                     const std::string &fileName, const std::filesystem::path &outputPath,
-                     const std::optional<std::string> &requestedModel,
-                     const std::optional<piper::SpeakerId> &speakerId,
-                     const std::optional<float> &noiseScale,
-                     const std::optional<float> &lengthScale,
-                     const std::optional<float> &noiseW,
-                     const std::optional<float> &sentenceSilenceSeconds,
+bool handleMarkupTts(SocketHandle clientSocket, const TtsRouteRequest &routeRequest,
+                     const std::string &fileName,
+                     const std::filesystem::path &outputPath,
                      const RouteContext &context,
                      const std::function<bool()> &shouldCancel) {
-  auto result = synthesizeMarkupScript(text, fileName, outputPath, requestedModel, speakerId,
-                                       noiseScale, lengthScale, noiseW, sentenceSilenceSeconds,
-                                       context.options, context.scheduler, shouldCancel);
+  auto result = synthesizeMarkupScript(
+      routeRequest.text, fileName, outputPath, routeRequest.requestedModel,
+      routeRequest.speakerId, routeRequest.noiseScale, routeRequest.lengthScale,
+      routeRequest.noiseW, routeRequest.sentenceSilenceSeconds, context.options,
+      context.scheduler, shouldCancel);
   context.metrics.sanitizedInputs++;
 
   sendJson(clientSocket, 201,
@@ -124,24 +40,19 @@ bool handleMarkupTts(SocketHandle clientSocket, const std::string &text,
                                                   {"sample_rate", result.outputSampleRate},
                                                   {"segments", result.segments}},
                                              json{{"mode", "markup"}},
-                                             requestedModel.value_or(result.tts.modelName))));
+                                             routeRequest.requestedModel.value_or(result.tts.modelName))));
   return true;
 }
 
-bool handlePlainTts(SocketHandle clientSocket, const std::string &text,
-                    const std::string &fileName, const std::filesystem::path &outputPath,
-                    const std::optional<std::string> &requestedModel,
-                    const std::optional<piper::SpeakerId> &speakerId,
-                    const std::optional<float> &noiseScale,
-                    const std::optional<float> &lengthScale,
-                    const std::optional<float> &noiseW,
-                    const std::optional<float> &sentenceSilenceSeconds,
+bool handlePlainTts(SocketHandle clientSocket, const TtsRouteRequest &routeRequest,
+                    const std::string &fileName,
+                    const std::filesystem::path &outputPath,
                     const RouteContext &context,
                     const std::function<bool()> &shouldCancel) {
   TtsTextSanitizeResult sanitization;
   const auto maxSafeTextChars = std::max<std::size_t>(
       1000, std::min<std::size_t>(50000, context.options.maxInputBytes));
-  const auto safeText = sanitizeTtsTextForApi(text, maxSafeTextChars, sanitization);
+  const auto safeText = sanitizeTtsTextForApi(routeRequest.text, maxSafeTextChars, sanitization);
   if (!sanitization.ok || safeText.empty()) {
     context.metrics.rejectedTextInputs++;
     sendJson(clientSocket, sanitization.warnings.empty() ? 400 : 422,
@@ -162,12 +73,12 @@ bool handlePlainTts(SocketHandle clientSocket, const std::string &text,
   jobRequest.text = safeText;
   jobRequest.fileName = fileName;
   jobRequest.outputPath = outputPath;
-  jobRequest.requestedModel = requestedModel;
-  jobRequest.speakerId = speakerId;
-  jobRequest.noiseScale = noiseScale;
-  jobRequest.lengthScale = lengthScale;
-  jobRequest.noiseW = noiseW;
-  jobRequest.sentenceSilenceSeconds = sentenceSilenceSeconds;
+  jobRequest.requestedModel = routeRequest.requestedModel;
+  jobRequest.speakerId = routeRequest.speakerId;
+  jobRequest.noiseScale = routeRequest.noiseScale;
+  jobRequest.lengthScale = routeRequest.lengthScale;
+  jobRequest.noiseW = routeRequest.noiseW;
+  jobRequest.sentenceSilenceSeconds = routeRequest.sentenceSilenceSeconds;
   jobRequest.shouldCancel = shouldCancel;
 
   auto result = context.scheduler.synthesize(jobRequest);
@@ -176,6 +87,44 @@ bool handlePlainTts(SocketHandle clientSocket, const std::string &text,
                            ttsSuccessPayload(fileName, result,
                                              json{{"enabled", false}},
                                              ttsSanitizeResultToJson(sanitization))));
+  return true;
+}
+
+void removePartialOutput(const std::filesystem::path &outputPath) {
+  std::error_code ignored;
+  std::filesystem::remove(outputPath, ignored);
+}
+
+bool synthesizeTtsRequest(SocketHandle clientSocket, const TtsRouteRequest &routeRequest,
+                          const RouteContext &context) {
+  std::filesystem::create_directories(context.options.outputDir);
+  std::string fileName = makeOutputFileName();
+  const auto outputPath = context.options.outputDir / fileName;
+  auto shouldCancel = [&clientSocket]() { return clientDisconnected(clientSocket); };
+
+  try {
+    if (looksLikeMarkupTts(routeRequest.text)) {
+      return handleMarkupTts(clientSocket, routeRequest, fileName, outputPath,
+                             context, shouldCancel);
+    }
+
+    return handlePlainTts(clientSocket, routeRequest, fileName, outputPath,
+                          context, shouldCancel);
+  } catch (const std::runtime_error &e) {
+    const std::string message = e.what();
+    if (message == "synthesis_cancelled") {
+      spdlog::warn("TTS request cancelled because client disconnected");
+      removePartialOutput(outputPath);
+      return true;
+    }
+
+    removePartialOutput(outputPath);
+    sendJson(clientSocket, errorStatusForException(message), modelErrorResponse(message));
+  } catch (const std::exception &e) {
+    removePartialOutput(outputPath);
+    sendJson(clientSocket, 500, errorResponse("synthesis_error", e.what()));
+  }
+
   return true;
 }
 
@@ -193,90 +142,13 @@ bool handleTtsRoute(SocketHandle clientSocket, const HttpRequest &request,
     return true;
   }
 
-  json input;
-  try {
-    input = json::parse(request.body);
-  } catch (const std::exception &) {
-    sendJson(clientSocket, 400,
-             errorResponse("invalid_json", "El body debe ser JSON válido."));
+  auto parsed = parseTtsRouteRequest(request, context.options.maxInputBytes);
+  if (!parsed.ok) {
+    sendJson(clientSocket, parsed.status, parsed.response);
     return true;
   }
 
-  if (!input.contains("text") || !input["text"].is_string() ||
-      input["text"].get<std::string>().empty()) {
-    sendJson(clientSocket, 400,
-             errorResponse("missing_fields", "El campo text es obligatorio."));
-    return true;
-  }
-
-  const auto text = input["text"].get<std::string>();
-  if (text.size() > context.options.maxInputBytes) {
-    sendJson(clientSocket, 413,
-             errorResponse("payload_too_large", "El texto excede el límite permitido."));
-    return true;
-  }
-
-  if (input.contains("output_file") || input.contains("outputFile")) {
-    sendJson(clientSocket, 400,
-             errorResponse("invalid_request",
-                           "output_file ya no está soportado. Piper Neo genera nombres seguros automáticamente."));
-    return true;
-  }
-
-  bool ok = true;
-  auto requestedModel = requestedModelFromJson(clientSocket, input, ok);
-  if (!ok) {
-    return true;
-  }
-
-  auto speakerId = speakerIdFromJson(clientSocket, input, ok);
-  if (!ok) {
-    return true;
-  }
-
-  std::optional<float> noiseScale;
-  std::optional<float> lengthScale;
-  std::optional<float> noiseW;
-  std::optional<float> sentenceSilenceSeconds;
-  if (!readSynthesisOptions(clientSocket, input, noiseScale, lengthScale, noiseW,
-                            sentenceSilenceSeconds)) {
-    return true;
-  }
-
-  std::filesystem::create_directories(context.options.outputDir);
-  std::string fileName = makeOutputFileName();
-  const auto outputPath = context.options.outputDir / fileName;
-  auto shouldCancel = [&clientSocket]() { return clientDisconnected(clientSocket); };
-
-  try {
-    if (looksLikeMarkupTts(text)) {
-      return handleMarkupTts(clientSocket, text, fileName, outputPath, requestedModel, speakerId,
-                             noiseScale, lengthScale, noiseW, sentenceSilenceSeconds, context,
-                             shouldCancel);
-    }
-
-    return handlePlainTts(clientSocket, text, fileName, outputPath, requestedModel, speakerId,
-                          noiseScale, lengthScale, noiseW, sentenceSilenceSeconds, context,
-                          shouldCancel);
-  } catch (const std::runtime_error &e) {
-    const std::string message = e.what();
-    if (message == "synthesis_cancelled") {
-      spdlog::warn("TTS request cancelled because client disconnected");
-      std::error_code ignored;
-      std::filesystem::remove(outputPath, ignored);
-      return true;
-    }
-
-    std::error_code ignored;
-    std::filesystem::remove(outputPath, ignored);
-    sendJson(clientSocket, errorStatusForException(message), modelErrorResponse(message));
-  } catch (const std::exception &e) {
-    std::error_code ignored;
-    std::filesystem::remove(outputPath, ignored);
-    sendJson(clientSocket, 500, errorResponse("synthesis_error", e.what()));
-  }
-
-  return true;
+  return synthesizeTtsRequest(clientSocket, parsed.value, context);
 }
 
 } // namespace piper_server

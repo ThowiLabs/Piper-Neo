@@ -19,8 +19,6 @@ std::string makeOutputFileName();
 json loadJsonFile(const std::filesystem::path &path);
 std::optional<json> tryLoadJsonFile(const std::filesystem::path &path,
                                     std::string &error);
-std::string decodeBase64(const std::string &encoded);
-std::pair<std::string, std::string> parseDataImage(const std::string &dataUri);
 
 } // namespace piper_server
 

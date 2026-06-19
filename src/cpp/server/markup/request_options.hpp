@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../types.hpp"
+#include "server/http_types.hpp"
 
 namespace piper_server {
 

@@ -69,6 +69,8 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/http/response_writer.cpp
   src/cpp/server/http/socket_io.cpp
   src/cpp/server/http/url.cpp
+  src/cpp/server/media/base64.cpp
+  src/cpp/server/media/data_image.cpp
   src/cpp/server/jobs/chunk_worker.cpp
   src/cpp/server/jobs/chunked_wav.cpp
   src/cpp/server/jobs/job_lifecycle.cpp
@@ -90,6 +92,8 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/routes/file_routes.cpp
   src/cpp/server/routes/health_routes.cpp
   src/cpp/server/routes/model_routes.cpp
+  src/cpp/server/routes/tts_payload.cpp
+  src/cpp/server/routes/tts_request.cpp
   src/cpp/server/routes/tts_routes.cpp
   ${PIPER_SANITIZE_SOURCES}
   src/cpp/server/tts_scheduler.cpp
@@ -130,6 +134,8 @@ set(PIPER_CORE_SOURCES
   src/cpp/core/text/utf8_utils.cpp
   src/cpp/core/text_chunker.cpp
   src/cpp/core/voice_loader.cpp
+  src/cpp/core/wav/stream_chunks.cpp
+  src/cpp/core/wav/wav_header_writer.cpp
   src/cpp/core/wav_stream_writer.cpp
   ${PIPER_NEO_SOURCES}
   ${PIPER_TEXT_SOURCES}
@@ -159,6 +165,8 @@ if(PIPER_BUILD_TESTS)
     src/cpp/core/text/utf8_utils.cpp
     src/cpp/core/text_chunker.cpp
     src/cpp/core/voice_loader.cpp
+    src/cpp/core/wav/stream_chunks.cpp
+    src/cpp/core/wav/wav_header_writer.cpp
     src/cpp/core/wav_stream_writer.cpp
     ${PIPER_TEXT_SOURCES}
   )
@@ -184,6 +192,8 @@ if(PIPER_BUILD_TESTS)
   add_executable(test_http_parser
     src/cpp/tests/test_http_parser.cpp
     src/cpp/server/http/url.cpp
+  src/cpp/server/media/base64.cpp
+  src/cpp/server/media/data_image.cpp
     src/cpp/server/utils.cpp
   )
 
@@ -197,6 +207,12 @@ if(PIPER_BUILD_TESTS)
   add_executable(test_resource_policy
     src/cpp/tests/test_resource_policy.cpp
     src/cpp/app/resource_limits.cpp
+  )
+
+  add_executable(test_tts_request
+    src/cpp/tests/test_tts_request.cpp
+    src/cpp/server/routes/tts_request.cpp
+    src/cpp/server/markup/request_options.cpp
   )
 endif()
 
@@ -347,6 +363,7 @@ if(PIPER_BUILD_TESTS)
   target_compile_features(test_http_parser PUBLIC cxx_std_17)
   target_compile_features(test_text_chunker PUBLIC cxx_std_17)
   target_compile_features(test_resource_policy PUBLIC cxx_std_17)
+  target_compile_features(test_tts_request PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -384,6 +401,11 @@ if(PIPER_BUILD_TESTS)
 
   target_include_directories(
     test_resource_policy PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_tts_request PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
   )
 
@@ -430,6 +452,11 @@ if(PIPER_BUILD_TESTS)
   add_test(
     NAME test_resource_policy
     COMMAND test_resource_policy
+  )
+
+  add_test(
+    NAME test_tts_request
+    COMMAND test_tts_request
   )
 endif()
 

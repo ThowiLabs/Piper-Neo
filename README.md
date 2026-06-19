@@ -283,6 +283,9 @@ More details are available in `docs/core-architecture.md` and `contexto/`.
 ## Documentation
 
 - `README.es.md`: Spanish documentation.
+- `docs/build-windows.md`: local Windows build and final binary smoke test.
+- `docs/server-api.md`: quick HTTP API reference.
+- `docs/neo-format.md`: internal `.neo` package format.
 - `docs/api-server.md`: HTTP API documentation.
 - `docs/new-piper-usage.md`: CLI usage, text files and smart chunking.
 - `docs/resource-management-plan.md`: resource management notes.

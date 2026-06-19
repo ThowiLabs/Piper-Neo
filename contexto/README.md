@@ -43,6 +43,10 @@ Leer en este orden:
 22. `22-refactor-text-chunker.md`
 23. `23-refactor-hardware-policy.md`
 24. `24-correccion-concurrencia-espeak.md`
+25. `25-refactor-pipeline-sintesis.md`
+26. `26-refactor-wav-utils-docs.md`
+27. `27-refactor-tts-route-request.md`
+28. `28-correccion-build-data-image-route.md`
 
 # Librerías usadas
 
@@ -59,6 +63,9 @@ Las mismas del proyecto: C++17, fmt, spdlog, piper-phonemize, espeak-ng, ONNX Ru
 - `src/cpp/neo/*`
 - `src/cpp/app/*`
 - `docs/text-preprocessing.md`
+- `docs/build-windows.md`
+- `docs/server-api.md`
+- `docs/neo-format.md`
 
 # Problemas encontrados
 
@@ -70,9 +77,8 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/`, los argumentos separan parser/ayuda/validación, `piper.hpp` es fachada pública, el scheduler delega métricas JSON/WAV/chunks/estado a módulos `server/jobs/`, el sanitizer API vive separado en `server/sanitize/`, `loadVoice()` recibe `speakerId` como referencia const, markup TTS vive dividido en `server/markup/`, las rutas HTTP viven separadas en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader y el chunking de texto vive separado en `core/text/` y la política automática de recursos vive separada de la detección de hardware. La fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto y model_cache evita cargas iniciales concurrentes del mismo modelo.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` vive en `src/cpp/neo/`, `neo_model.cpp` es fachada pública, los modos CLI viven bajo `src/cpp/app/`, `piper.hpp` es fachada pública, el scheduler delega estado/WAV/chunks a módulos `server/jobs/`, el sanitizer vive en `server/sanitize/`, markup TTS vive en `server/markup/`, rutas HTTP viven en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader, chunking de texto vive en `core/text/`, la política de recursos vive separada de detección de hardware, la fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto, `model_cache` evita cargas iniciales concurrentes, el streaming WAV ahora separa header/parcheo de chunks de audio, `/api/v1/tts` separa request JSON/payload de respuesta de la coordinación de síntesis y `model_routes.cpp` usa explícitamente `server/media/data_image.hpp` para imágenes embebidas.
 
 # Próximos pasos
 
 Probar el build real de Windows y ejecutar `script/smoke-piper-binary.py --models <ruta>` para validar CLI, API, TTS y descarga WAV con modelos reales.
-- `25-refactor-pipeline-sintesis.md` — separación del pipeline de síntesis en etapas internas.

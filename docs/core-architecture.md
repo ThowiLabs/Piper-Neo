@@ -275,3 +275,34 @@ src/cpp/core/pipeline/phrase_synthesizer.cpp  Split por silencios de fonemas, co
 ```
 
 La API pública `textToAudio()` no cambió. La serialización de eSpeak/tashkeel sigue siendo de alcance corto y la inferencia ONNX conserva paralelismo por réplica después de la fonemización.
+
+## Refactor WAV y utilidades multimedia
+
+El streaming WAV del core quedó separado para evitar que `wav_stream_writer.cpp` concentre header, escritura incremental, lectura de stream y síntesis por chunks:
+
+```text
+src/cpp/core/wav_stream_writer.cpp        Orquestador público de WAV.
+src/cpp/core/wav/wav_header_writer.*      Header RIFF/WAVE temporal y parcheo final.
+src/cpp/core/wav/stream_chunks.*          Síntesis de chunks hacia std::ostream.
+```
+
+Las utilidades multimedia del servidor también fueron separadas:
+
+```text
+src/cpp/server/media/base64.*      Decodificación Base64.
+src/cpp/server/media/data_image.*  Parseo de data:image/...;base64 usado por model cards.
+```
+
+`server/utils.*` queda limitado a utilidades generales: tiempo, strings, nombres seguros, JSON y nombres de salida.
+
+## Refactor de request TTS
+
+La ruta `/api/v1/tts` mantiene `handleTtsRoute()` como entrada pública, pero el parseo de request y el payload de respuesta quedaron separados:
+
+```text
+src/cpp/server/routes/tts_request.*  JSON, validación de campos, opciones y límites.
+src/cpp/server/routes/tts_payload.*  Payload de éxito compartido por TTS plain y markup.
+src/cpp/server/routes/tts_routes.*   Dispatch, sanitizer, scheduler, markup y limpieza de errores.
+```
+
+Esto reduce el acoplamiento de la ruta y permite agregar pruebas unitarias de request sin levantar sockets.

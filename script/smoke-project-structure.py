@@ -37,6 +37,10 @@ REQUIRED_FILES = [
     "src/cpp/core/text/utf8_utils.cpp",
     "src/cpp/core/voice_loader.cpp",
     "src/cpp/core/wav_stream_writer.cpp",
+    "src/cpp/core/wav/wav_header_writer.cpp",
+    "src/cpp/core/wav/wav_header_writer.hpp",
+    "src/cpp/core/wav/stream_chunks.cpp",
+    "src/cpp/core/wav/stream_chunks.hpp",
     "src/cpp/neo/binary_io.cpp",
     "src/cpp/neo/compression.cpp",
     "src/cpp/neo/file_utils.cpp",
@@ -94,11 +98,19 @@ REQUIRED_FILES = [
     "src/cpp/server/routes/file_routes.hpp",
     "src/cpp/server/routes/file_routes.cpp",
     "src/cpp/server/routes/tts_routes.hpp",
+    "src/cpp/server/routes/tts_request.hpp",
+    "src/cpp/server/routes/tts_payload.hpp",
+    "src/cpp/server/routes/tts_payload.cpp",
+    "src/cpp/server/routes/tts_request.cpp",
     "src/cpp/server/routes/tts_routes.cpp",
     "src/cpp/server/http_types.hpp",
     "src/cpp/server/http/response_writer.cpp",
     "src/cpp/server/http/socket_io.cpp",
     "src/cpp/server/http/url.cpp",
+    "src/cpp/server/media/data_image.cpp",
+    "src/cpp/server/media/data_image.hpp",
+    "src/cpp/server/media/base64.cpp",
+    "src/cpp/server/media/base64.hpp",
     "src/cpp/server/model_cache.cpp",
     "src/cpp/server/model_loader.cpp",
     "src/cpp/server/model_runtime.cpp",
@@ -111,6 +123,7 @@ REQUIRED_FILES = [
     "src/cpp/tests/test_http_parser.cpp",
     "src/cpp/tests/test_text_chunker.cpp",
     "src/cpp/tests/test_resource_policy.cpp",
+    "src/cpp/tests/test_tts_request.cpp",
     "script/smoke-piper-binary.py",
 ]
 
@@ -128,6 +141,8 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/core/text_chunker.cpp",
     "src/cpp/core/voice_loader.cpp",
     "src/cpp/core/wav_stream_writer.cpp",
+    "src/cpp/core/wav/wav_header_writer.cpp",
+    "src/cpp/core/wav/stream_chunks.cpp",
     "src/cpp/neo/binary_io.cpp",
     "src/cpp/neo/compression.cpp",
     "src/cpp/neo/file_utils.cpp",
@@ -158,11 +173,15 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/server/routes/health_routes.cpp",
     "src/cpp/server/routes/model_routes.cpp",
     "src/cpp/server/routes/file_routes.cpp",
+    "src/cpp/server/routes/tts_payload.cpp",
+    "src/cpp/server/routes/tts_request.cpp",
     "src/cpp/server/routes/tts_routes.cpp",
     "src/cpp/server/http_types.hpp",
     "src/cpp/server/http/response_writer.cpp",
     "src/cpp/server/http/socket_io.cpp",
     "src/cpp/server/http/url.cpp",
+    "src/cpp/server/media/data_image.cpp",
+    "src/cpp/server/media/base64.cpp",
     "src/cpp/server/model_cache.cpp",
     "src/cpp/server/model_loader.cpp",
     "src/cpp/server/model_runtime.cpp",
@@ -174,8 +193,7 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/tests/test_markup_parser.cpp",
     "src/cpp/tests/test_http_parser.cpp",
     "src/cpp/tests/test_text_chunker.cpp",
-    "src/cpp/tests/test_resource_policy.cpp",
-]
+    "src/cpp/tests/test_resource_policy.cpp",]
 
 EXPECTED_CONTEXT = {
     "README.md",
@@ -204,6 +222,9 @@ EXPECTED_CONTEXT = {
     "23-refactor-hardware-policy.md",
     "24-correccion-concurrencia-espeak.md",
     "25-refactor-pipeline-sintesis.md",
+    "26-refactor-wav-utils-docs.md",
+    "27-refactor-tts-route-request.md",
+    "28-correccion-build-data-image-route.md",
 }
 
 
@@ -235,11 +256,14 @@ def main() -> None:
         "src/cpp/app/cli_args.cpp": 280,
         "src/cpp/app/hardware.cpp": 80,
         "src/cpp/core/text_chunker.cpp": 80,
+        "src/cpp/core/wav_stream_writer.cpp": 120,
+        "src/cpp/server/utils.cpp": 120,
         "src/cpp/server/tts_scheduler.cpp": 260,
         "src/cpp/server/model_cache.cpp": 150,
         "src/cpp/server/text_sanitizer.cpp": 120,
         "src/cpp/server/markup_tts.cpp": 260,
         "src/cpp/server/request_handler.cpp": 120,
+        "src/cpp/server/routes/tts_routes.cpp": 180,
     }
     for relative, max_allowed in max_lines.items():
         count = line_count(relative)
@@ -283,6 +307,16 @@ def main() -> None:
         fail("http.cpp debe quedarse como parser de request")
     if http_url_cpp.count("ParsedTarget parseTarget") != 1 or http_url_cpp.count("std::string urlDecode") != 1:
         fail("server/http/url.cpp debe conservar una sola definición de parseTarget y urlDecode")
+
+    if "decodeBase64" in utils_cpp or "parseDataImage" in utils_cpp:
+        fail("utils.cpp no debe conservar base64 ni data image")
+    model_routes_cpp = (ROOT / "src/cpp/server/routes/model_routes.cpp").read_text(encoding="utf-8")
+    if "parseDataImage" in model_routes_cpp and '#include "server/media/data_image.hpp"' not in model_routes_cpp:
+        fail("model_routes.cpp usa parseDataImage pero no incluye server/media/data_image.hpp")
+
+    for source in ["src/cpp/server/media/base64.cpp", "src/cpp/server/media/data_image.cpp"]:
+        if source not in cmake:
+            fail(f"CMakeLists.txt no referencia {source}")
 
     if '#include "types.hpp"' in (ROOT / "src/cpp/server/utils.hpp").read_text(encoding="utf-8"):
         fail("utils.hpp no debe incluir server/types.hpp")

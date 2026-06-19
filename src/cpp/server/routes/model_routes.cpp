@@ -5,6 +5,7 @@
 
 #include "neo_model.hpp"
 #include "server/model_registry.hpp"
+#include "server/media/data_image.hpp"
 #include "server/responses.hpp"
 #include "server/utils.hpp"
 

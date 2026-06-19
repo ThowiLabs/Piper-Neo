@@ -284,6 +284,9 @@ Más detalles en `docs/core-architecture.md` y `contexto/`.
 ## Documentación
 
 - `README.md`: documentación en inglés.
+- `docs/build-windows.md`: build local Windows y smoke del binario final.
+- `docs/server-api.md`: referencia rápida de la API HTTP.
+- `docs/neo-format.md`: formato interno de paquetes `.neo`.
 - `docs/api-server.md`: documentación de la API HTTP.
 - `docs/new-piper-usage.md`: uso CLI, archivos de texto y chunking inteligente.
 - `docs/resource-management-plan.md`: notas de administración de recursos.

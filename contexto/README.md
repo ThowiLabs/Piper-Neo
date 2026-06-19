@@ -75,3 +75,4 @@ Mantener estos archivos actualizados cuando cambien arquitectura, build, API, no
 # Próximos pasos
 
 Probar el build real de Windows y ejecutar `script/smoke-piper-binary.py --models <ruta>` para validar CLI, API, TTS y descarga WAV con modelos reales.
+- `25-refactor-pipeline-sintesis.md` — separación del pipeline de síntesis en etapas internas.

@@ -263,3 +263,15 @@ El servidor puede procesar chunks y peticiones en paralelo, pero eSpeak-ng y pip
 `model_cache.*` también evita el stampede de carga inicial: si varios chunks piden el mismo modelo sin cache, solo un hilo carga la primera réplica y los demás esperan a que exista un slot usable antes de crear réplicas adicionales.
 
 `script/smoke-piper-binary.py` incluye `--stress-api-requests` para lanzar peticiones TTS concurrentes con texto largo y detectar regresiones de eSpeak/model cache después de compilar el binario real.
+
+## Refactor del pipeline de síntesis
+
+`src/cpp/core/synthesis_pipeline.cpp` quedó como orquestador de alto nivel. Las etapas internas del pipeline viven en módulos dedicados:
+
+```text
+src/cpp/core/pipeline/text_processing.cpp     Normalización de texto y tashkeel protegido por mutex.
+src/cpp/core/pipeline/phonemizer.cpp          Fonemización eSpeak/codepoints con protección de concurrencia.
+src/cpp/core/pipeline/phrase_synthesizer.cpp  Split por silencios de fonemas, conversión a IDs e inferencia por frases.
+```
+
+La API pública `textToAudio()` no cambió. La serialización de eSpeak/tashkeel sigue siendo de alcance corto y la inferencia ONNX conserva paralelismo por réplica después de la fonemización.

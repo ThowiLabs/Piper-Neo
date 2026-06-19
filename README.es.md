@@ -270,7 +270,7 @@ El core C++ está dividido por responsabilidades:
 - `src/cpp/main.cpp`: punto de entrada mínimo.
 - `src/cpp/app/`: parsing CLI, ayuda, validación, configuración, detección de hardware, política de recursos, entorno y modos de ejecución CLI/server/export/síntesis.
 - `src/cpp/piper.hpp` y `src/cpp/piper/`: fachada pública compatible, tipos públicos y API del motor.
-- `src/cpp/core/`: runtime Piper, carga de voz, inferencia ONNX, chunking UTF-8 seguro, pipeline de síntesis y escritura WAV.
+- `src/cpp/core/`: runtime Piper, carga de voz, inferencia ONNX, chunking UTF-8 seguro, pipeline de síntesis por etapas y escritura WAV.
 - `src/cpp/server.cpp`: runtime del servidor local, sockets y loop de aceptación.
 - `src/cpp/server/`: HTTP, auth, dispatch de rutas, sanitización, modelos, caché/runtime/loader, scheduler TTS, métricas, markup TTS, WAV, jobs y limpieza.
 - `src/cpp/server/routes/`: rutas HTTP separadas por responsabilidad: health/status/métricas, modelos/imágenes, archivos generados y síntesis TTS.

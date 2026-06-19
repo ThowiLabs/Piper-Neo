@@ -76,7 +76,7 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 
 ### Prioridad baja
 
-1. `src/cpp/core/synthesis_pipeline.cpp`: separar stages cuando existan pruebas de audio suficientes.
+1. `src/cpp/core/synthesis_pipeline.cpp`: ya fue separado en etapas internas; falta validar audio real con más modelos.
 2. `src/cpp/app/platform.cpp`: revisar si conviene separar consola Windows, paths y entorno.
 3. `CMakeLists.txt`: ordenar secciones si crece más, evitando fragmentar el build sin necesidad.
 
@@ -114,3 +114,13 @@ Se agregó `script/smoke-piper-binary.py` para probar un binario ya compilado co
 Se corrigió una regresión detectada con textos largos y varios modelos en modo API: varios chunks podían cargar réplicas del mismo modelo en paralelo y fonemizar simultáneamente con eSpeak-ng. En Windows esto podía producir `Bad data: es_dict length=0`.
 
 La solución serializa solo la sección global de eSpeak/tashkeel y evita cargas iniciales concurrentes del mismo modelo. La inferencia ONNX y las réplicas siguen disponibles para paralelismo después de la fonemización. El smoke del binario final ahora permite stress concurrente con `--stress-api-requests`.
+
+
+## Avance posterior: pipeline de síntesis
+
+- `src/cpp/core/synthesis_pipeline.cpp`: reducido a orquestador de alto nivel.
+- `src/cpp/core/pipeline/text_processing.*`: normalización de texto y diacritización tashkeel con lock de concurrencia.
+- `src/cpp/core/pipeline/phonemizer.*`: fonemización eSpeak/codepoints con lock corto para evitar corrupción de diccionarios.
+- `src/cpp/core/pipeline/phrase_synthesizer.*`: división por silencios de fonemas, conversión a IDs, inferencia por frases y logs de fonemas faltantes.
+
+Pendiente: validar audio real con `.onnx`, `.neo`, textos largos, `--output_raw` y stress API concurrente después de compilar el binario Windows.

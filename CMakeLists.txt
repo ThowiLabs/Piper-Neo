@@ -122,6 +122,9 @@ set(PIPER_CORE_SOURCES
   src/cpp/core/piper_runtime.cpp
   src/cpp/core/sentence_splitter.cpp
   src/cpp/core/synthesis_pipeline.cpp
+  src/cpp/core/pipeline/phonemizer.cpp
+  src/cpp/core/pipeline/phrase_synthesizer.cpp
+  src/cpp/core/pipeline/text_processing.cpp
   src/cpp/core/synthesis_utils.cpp
   src/cpp/core/text/chunk_rules.cpp
   src/cpp/core/text/utf8_utils.cpp
@@ -148,6 +151,9 @@ if(PIPER_BUILD_TESTS)
     src/cpp/core/piper_runtime.cpp
     src/cpp/core/sentence_splitter.cpp
     src/cpp/core/synthesis_pipeline.cpp
+    src/cpp/core/pipeline/phonemizer.cpp
+    src/cpp/core/pipeline/phrase_synthesizer.cpp
+    src/cpp/core/pipeline/text_processing.cpp
     src/cpp/core/synthesis_utils.cpp
     src/cpp/core/text/chunk_rules.cpp
     src/cpp/core/text/utf8_utils.cpp

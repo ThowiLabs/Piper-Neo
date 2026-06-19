@@ -21,6 +21,12 @@ REQUIRED_FILES = [
     "src/cpp/core/sentence_splitter.hpp",
     "src/cpp/core/sentence_splitter.cpp",
     "src/cpp/core/synthesis_pipeline.cpp",
+    "src/cpp/core/pipeline/phonemizer.hpp",
+    "src/cpp/core/pipeline/phonemizer.cpp",
+    "src/cpp/core/pipeline/phrase_synthesizer.hpp",
+    "src/cpp/core/pipeline/phrase_synthesizer.cpp",
+    "src/cpp/core/pipeline/text_processing.hpp",
+    "src/cpp/core/pipeline/text_processing.cpp",
     "src/cpp/core/synthesis_utils.hpp",
     "src/cpp/core/synthesis_utils.cpp",
     "src/cpp/core/text_chunker.hpp",
@@ -113,6 +119,9 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/core/piper_runtime.cpp",
     "src/cpp/core/sentence_splitter.cpp",
     "src/cpp/core/synthesis_pipeline.cpp",
+    "src/cpp/core/pipeline/phonemizer.cpp",
+    "src/cpp/core/pipeline/phrase_synthesizer.cpp",
+    "src/cpp/core/pipeline/text_processing.cpp",
     "src/cpp/core/synthesis_utils.cpp",
     "src/cpp/core/text/chunk_rules.cpp",
     "src/cpp/core/text/utf8_utils.cpp",
@@ -194,6 +203,7 @@ EXPECTED_CONTEXT = {
     "22-refactor-text-chunker.md",
     "23-refactor-hardware-policy.md",
     "24-correccion-concurrencia-espeak.md",
+    "25-refactor-pipeline-sintesis.md",
 }
 
 
@@ -253,11 +263,12 @@ def main() -> None:
     if "std::array<char, 64 * 1024>" in tts_scheduler_cpp:
         fail("tts_scheduler.cpp no debe ensamblar WAV por buffers")
 
-    synthesis_pipeline_cpp = (ROOT / "src/cpp/core/synthesis_pipeline.cpp").read_text(encoding="utf-8")
-    if "globalPhonemizeMutex" not in synthesis_pipeline_cpp or "phonemize_eSpeak" not in synthesis_pipeline_cpp:
-        fail("synthesis_pipeline.cpp debe proteger la fonemización eSpeak concurrente")
-    if "globalTashkeelMutex" not in synthesis_pipeline_cpp or "tashkeel_run" not in synthesis_pipeline_cpp:
-        fail("synthesis_pipeline.cpp debe proteger libtashkeel concurrente")
+    phonemizer_cpp = (ROOT / "src/cpp/core/pipeline/phonemizer.cpp").read_text(encoding="utf-8")
+    text_processing_cpp = (ROOT / "src/cpp/core/pipeline/text_processing.cpp").read_text(encoding="utf-8")
+    if "globalPhonemizeMutex" not in phonemizer_cpp or "phonemize_eSpeak" not in phonemizer_cpp:
+        fail("phonemizer.cpp debe proteger la fonemización eSpeak concurrente")
+    if "globalTashkeelMutex" not in text_processing_cpp or "tashkeel_run" not in text_processing_cpp:
+        fail("text_processing.cpp debe proteger libtashkeel concurrente")
 
     model_cache_cpp = (ROOT / "src/cpp/server/model_cache.cpp").read_text(encoding="utf-8")
     if "runtime->loadingSlots > 0" not in model_cache_cpp:

@@ -161,3 +161,11 @@ Implementado: `test_tts_request.cpp` valida errores de request sin depender del 
   renderizado hablado y segmentos protegidos.
 - `test_text_builtins` valida números, versiones, correos, URLs, moneda,
   porcentajes, puntuación final y límites seguros de decimales.
+
+
+## Cierre de refactor
+
+- `src/cpp/app/platform_console.cpp` concentra la consola UTF-8 en Windows.
+- `src/cpp/app/platform_paths.cpp` concentra la resolución de ruta del ejecutable.
+- `script/smoke-piper-binary.py` valida CLI avanzado, API HTTP y stress concurrente con modelos reales.
+- El core no convierte números, moneda, porcentajes ni versiones; esa responsabilidad queda en `replacements` por modelo.

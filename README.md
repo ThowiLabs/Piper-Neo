@@ -25,7 +25,7 @@ This repository is focused on the Piper Neo engine itself: C++ CLI, local HTTP A
 - Fair chunk scheduler so long requests do not monopolize the engine.
 - Temporary output limits and automatic cleanup.
 - Model metadata endpoints without exposing absolute internal paths.
-- Configurable text normalization per model for URLs, emails, currency, percentages, versions and replacements.
+- Configurable text normalization per model for URLs, emails and replacements. Number, currency, percentage and version conversion belongs in each model JSON/replacements.
 
 ## Repository scope
 

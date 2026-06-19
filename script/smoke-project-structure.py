@@ -64,7 +64,11 @@ REQUIRED_FILES = [
     "src/cpp/app/resource_policy.hpp",
     "src/cpp/app/resource_policy.cpp",
     "src/cpp/app/server_mode.cpp",
+    "src/cpp/app/platform_console.cpp",
+    "src/cpp/app/platform_paths.cpp",
     "src/cpp/app/server_mode.hpp",
+    "src/cpp/app/platform_console.cpp",
+    "src/cpp/app/platform_paths.cpp",
     "src/cpp/app/synthesis_input.cpp",
     "src/cpp/app/synthesis_input.hpp",
     "src/cpp/app/synthesis_json.cpp",
@@ -177,6 +181,8 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/app/resource_policy.cpp",
     "src/cpp/app/export_neo_mode.cpp",
     "src/cpp/app/server_mode.cpp",
+    "src/cpp/app/platform_console.cpp",
+    "src/cpp/app/platform_paths.cpp",
     "src/cpp/app/synthesis_input.cpp",
     "src/cpp/app/synthesis_json.cpp",
     "src/cpp/app/synthesis_mode.cpp",
@@ -257,6 +263,7 @@ EXPECTED_CONTEXT = {
     "27-refactor-tts-route-request.md",
     "28-correccion-build-data-image-route.md",
     "29-refactor-sentence-splitter-model-tests.md",
+    "30-cierre-refactor-cli-platform-docs.md",
 }
 
 
@@ -288,6 +295,7 @@ def main() -> None:
         "src/cpp/app/cli_args.cpp": 280,
         "src/cpp/app/hardware.cpp": 80,
         "src/cpp/app/synthesis_mode.cpp": 130,
+        "src/cpp/app/platform.cpp": 20,
         "src/cpp/text/builtin_normalizer.cpp": 180,
         "src/cpp/core/text_chunker.cpp": 80,
         "src/cpp/core/sentence_splitter.cpp": 80,
@@ -304,6 +312,19 @@ def main() -> None:
         count = line_count(relative)
         if count > max_allowed:
             fail(f"{relative} volvió a concentrar demasiada lógica: {count} líneas")
+
+
+    platform_console_cpp = (ROOT / "src/cpp/app/platform_console.cpp").read_text(encoding="utf-8")
+    platform_paths_cpp = (ROOT / "src/cpp/app/platform_paths.cpp").read_text(encoding="utf-8")
+    if "SetConsoleOutputCP" not in platform_console_cpp or "SetConsoleCP" not in platform_console_cpp:
+        fail("platform_console.cpp debe concentrar la configuracion UTF-8 de consola Windows")
+    if "resolveExecutablePath" not in platform_paths_cpp or "GetModuleFileNameW" not in platform_paths_cpp:
+        fail("platform_paths.cpp debe concentrar la resolucion de ruta del ejecutable")
+
+    smoke_binary = (ROOT / "script/smoke-piper-binary.py").read_text(encoding="utf-8")
+    for expected in ["--input_file", "--json-input", "--output_dir", "--output_raw", "--skip-cli-raw"]:
+        if expected not in smoke_binary:
+            fail(f"smoke-piper-binary.py debe probar o exponer {expected}")
 
     piper_header = (ROOT / "src/cpp/piper.hpp").read_text(encoding="utf-8")
     if '#include "piper/api.hpp"' not in piper_header:

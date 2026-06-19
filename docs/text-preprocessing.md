@@ -15,7 +15,7 @@ Piper Neo protege el texto antes de enviarlo al fonemizador y al modelo de voz. 
    - Rechaza con `422 text_not_pronounceable` si el texto queda vacío o no es seguro.
 
 2. **Normalización por modelo**
-   - Si el modelo declara `neo.text_normalization`, se aplican reglas de lectura para decimales, moneda, porcentajes, versiones, URLs, correos y reemplazos.
+   - Si el modelo declara `neo.text_normalization`, se aplican reemplazos del modelo y, solo si se habilitan, builtins seguros de URLs/correos. Decimales, moneda, porcentajes y versiones deben definirse con `replacements` por modelo.
    - Los modelos clásicos sin configuración Neo conservan el comportamiento original.
 
 ## Respuesta de la API

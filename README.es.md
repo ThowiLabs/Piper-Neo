@@ -25,7 +25,7 @@ Este repositorio se enfoca solo en el motor Piper Neo: CLI C++, API HTTP local, 
 - Scheduler justo por chunks para que un texto largo no bloquee todo el motor.
 - Límites de temporales y limpieza automática.
 - Endpoints de metadata sin exponer rutas absolutas internas.
-- Normalización de texto configurable por modelo para URLs, correos, moneda, porcentajes, versiones y reemplazos.
+- Normalización de texto configurable por modelo para URLs, correos y reemplazos. La conversión de números, moneda, porcentajes y versiones queda en el JSON/replacements de cada modelo.
 
 ## Alcance del repositorio
 

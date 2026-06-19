@@ -48,6 +48,7 @@ Leer en este orden:
 27. `27-refactor-tts-route-request.md`
 28. `28-correccion-build-data-image-route.md`
 29. `29-refactor-sentence-splitter-model-tests.md`
+30. `30-cierre-refactor-cli-platform-docs.md`
 
 # Librerías usadas
 
@@ -78,23 +79,8 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` vive en `src/cpp/neo/`, `neo_model.cpp` es fachada pública, los modos CLI viven bajo `src/cpp/app/`, `piper.hpp` es fachada pública, el scheduler delega estado/WAV/chunks a módulos `server/jobs/`, el sanitizer vive en `server/sanitize/`, markup TTS vive en `server/markup/`, rutas HTTP viven en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader, chunking de texto vive en `core/text/`, la política de recursos vive separada de detección de hardware, la fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto, `model_cache` evita cargas iniciales concurrentes, el streaming WAV ahora separa header/parcheo de chunks de audio, `/api/v1/tts` separa request JSON/payload de respuesta de la coordinación de síntesis y `model_routes.cpp` usa explícitamente `server/media/data_image.hpp` para imágenes embebidas, el splitter explícito de oraciones delega reglas a `core/sentence/boundary_detector.*`, existen pruebas fake para `ModelRegistry`/`scanModels`, el modo CLI de síntesis separa entrada/JSON/salida/rutas y la normalización builtin separa matchers/renderers/segmentos protegidos con pruebas propias.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` vive en `src/cpp/neo/`, `neo_model.cpp` es fachada pública, los modos CLI viven bajo `src/cpp/app/`, `piper.hpp` es fachada pública, el scheduler delega estado/WAV/chunks a módulos `server/jobs/`, el sanitizer vive en `server/sanitize/`, markup TTS vive en `server/markup/`, rutas HTTP viven en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader, chunking de texto vive en `core/text/`, la política de recursos vive separada de detección de hardware, la fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto, `model_cache` evita cargas iniciales concurrentes, el streaming WAV ahora separa header/parcheo de chunks de audio, `/api/v1/tts` separa request JSON/payload de respuesta de la coordinación de síntesis y `model_routes.cpp` usa explícitamente `server/media/data_image.hpp` para imágenes embebidas, el splitter explícito de oraciones delega reglas a `core/sentence/boundary_detector.*`, existen pruebas fake para `ModelRegistry`/`scanModels`, el modo CLI de síntesis separa entrada/JSON/salida/rutas, la normalización builtin separa matchers/renderers/segmentos protegidos con pruebas propias, `platform` separa consola/rutas del ejecutable y el smoke del binario cubre CLI avanzado más API HTTP y ya no queda script temporal de limpieza en el repo final.
 
 # Próximos pasos
 
 Probar el build real de Windows y ejecutar `script/smoke-piper-binary.py --models <ruta>` para validar CLI, API, TTS y descarga WAV con modelos reales.
-
-
-
-## Avance posterior: synthesis mode y builtins de texto
-
-- `src/cpp/app/synthesis_mode.cpp`: reducido a orquestador del modo síntesis CLI.
-- `src/cpp/app/synthesis_input.*`: entrada directa desde texto, archivo o stdin.
-- `src/cpp/app/synthesis_json.*`: overrides por línea JSON.
-- `src/cpp/app/synthesis_output.*`: salida WAV/stdout/raw y logging de resultado.
-- `src/cpp/app/synthesis_paths.*`: nombres de salida por timestamp.
-- `src/cpp/text/builtin_normalizer.cpp`: reducido a scanner de tokens builtin.
-- `src/cpp/text/builtin_matchers.*`: regex y límites seguros.
-- `src/cpp/text/builtin_renderers.*`: conversión hablada de URL, correo, versión, moneda y porcentaje.
-- `src/cpp/text/protected_segments.*`: protección temporal para evitar que reemplazos personalizados rompan tokens builtin.
-- `src/cpp/tests/test_text_builtins.cpp`: pruebas unitarias de números, URL, email, moneda, versiones, porcentajes y límites de decimales.

@@ -64,7 +64,7 @@ Los reemplazos se ordenan por `priority` y después por longitud. Esto permite q
 
 ## Reglas builtin incluidas
 
-Piper Neo no convierte números, moneda, porcentajes ni versiones desde el core. Esas reglas deben vivir en `neo.text_normalization.replacements` de cada modelo.
+Piper Neo no convierte números, moneda, porcentajes ni versiones desde el core. Esas reglas deben vivir en `neo.text_normalization.replacements` de cada modelo y deben ser decididas por la configuración de cada voz.
 
 Las únicas reglas builtin activas son protección/lectura básica de URLs y correos, y tampoco se activan por defecto:
 
@@ -103,7 +103,7 @@ Ese formato funciona, pero el recomendado es `neo.text_normalization.replacement
 
 ## Protección de tokens normalizados
 
-Las reglas inteligentes generan texto protegido internamente antes de aplicar reemplazos personalizados. Esto evita que una marca dentro de un enlace se vuelva a reemplazar por accidente.
+Los builtins de URL/correo generan texto protegido internamente antes de aplicar reemplazos personalizados. Esto evita que una marca dentro de un enlace se vuelva a reemplazar por accidente.
 
 Por ejemplo, si existe el reemplazo `GitHub → Guit Jab` y el modelo activa `builtin.urls`, el texto `https://github.com` se normaliza como `github punto com` y no como `Guit Jab punto com`. Los reemplazos siguen funcionando fuera de URLs y correos.
 

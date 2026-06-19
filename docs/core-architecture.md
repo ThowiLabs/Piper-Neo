@@ -333,3 +333,11 @@ test:
   before custom replacements are applied.
 - `tests/test_text_builtins.cpp`: fast unit coverage without ONNX, eSpeak or
   piper-phonemize.
+
+
+## Cierre de refactor
+
+- `src/cpp/app/platform_console.cpp` concentra la consola UTF-8 en Windows.
+- `src/cpp/app/platform_paths.cpp` concentra la resolución de ruta del ejecutable.
+- `script/smoke-piper-binary.py` valida CLI avanzado, API HTTP y stress concurrente con modelos reales.
+- El core no convierte números, moneda, porcentajes ni versiones; esa responsabilidad queda en `replacements` por modelo.

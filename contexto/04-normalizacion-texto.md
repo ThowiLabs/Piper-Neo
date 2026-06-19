@@ -10,7 +10,7 @@ Documentar la normalización de texto configurable por modelo.
 # Decisiones tomadas
 
 - Los modelos clásicos sin `neo.text_normalization` conservan comportamiento original.
-- Los modelos Neo pueden activar reglas para decimales, moneda, porcentajes, versiones, URLs, correos y reemplazos.
+- Los modelos Neo pueden activar builtins seguros para URLs/correos y definir replacements propios. Decimales, moneda, porcentajes y versiones quedan fuera del core y deben configurarse por modelo si se desean.
 - La normalización se mantiene separada del sanitizer del servidor.
 
 # Arquitectura actual

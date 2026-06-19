@@ -107,6 +107,25 @@ def run_command(cmd: list[str], timeout: int = 60, input_text: str | None = None
     return completed
 
 
+
+def run_binary_command(cmd: list[str], timeout: int = 60,
+                       input_bytes: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
+    log("$ " + " ".join(str(part) for part in cmd))
+    completed = subprocess.run(
+        cmd,
+        input=input_bytes,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+        cwd=str(ROOT),
+    )
+    if completed.returncode != 0:
+        sys.stdout.buffer.write(completed.stdout)
+        sys.stderr.buffer.write(completed.stderr)
+        fail(f"Comando fallo con codigo {completed.returncode}: {' '.join(cmd)}")
+    return completed
+
+
 def find_voice_model(models_dir: Path) -> tuple[Path, Path | None]:
     if not models_dir.exists():
         fail(f"No existe --models: {models_dir}")
@@ -246,17 +265,72 @@ def stop_server(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=5)
 
 
+def append_config(cmd: list[str], config: Path | None) -> list[str]:
+    if config:
+        cmd.extend(["--config", str(config)])
+    return cmd
+
+
+def assert_raw_audio(data: bytes, label: str) -> None:
+    if len(data) < 256:
+        fail(f"Salida RAW demasiado pequena en {label}: {len(data)} bytes")
+    if data[:4] == b"RIFF" or data[8:12] == b"WAVE":
+        fail(f"{label} esperaba audio RAW, pero parece WAV")
+    if all(byte == 0 for byte in data[: min(len(data), 4096)]):
+        fail(f"{label} contiene solo ceros al inicio")
+    log(f"RAW OK: {label} ({len(data)} bytes)")
+
+
+def newest_wav(directory: Path) -> Path:
+    wavs = sorted(directory.glob("*.wav"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not wavs:
+        fail(f"No se genero ningun WAV en {directory}")
+    return wavs[0]
+
+
 def test_cli(binary: Path, model: Path, config: Path | None, text: str, work_dir: Path,
-             timeout: int) -> None:
+             timeout: int, skip_raw: bool) -> None:
     run_command([str(binary), "--help"], timeout=timeout)
     run_command([str(binary), "--version"], timeout=timeout)
 
-    output = work_dir / "cli-test.wav"
-    cmd = [str(binary), "--model", str(model), "--text", text, "--output_file", str(output), "--quiet"]
-    if config:
-        cmd.extend(["--config", str(config)])
+    output = work_dir / "cli-text.wav"
+    cmd = append_config([str(binary), "--model", str(model), "--text", text,
+                         "--output_file", str(output), "--quiet"], config)
     run_command(cmd, timeout=timeout)
     assert_wav(output)
+
+    input_file = work_dir / "cli-input.txt"
+    input_file.write_text(text + "\nSegunda linea desde archivo.", encoding="utf-8")
+    output = work_dir / "cli-input-file.wav"
+    cmd = append_config([str(binary), "--model", str(model), "--input_file", str(input_file),
+                         "--output_file", str(output), "--quiet"], config)
+    run_command(cmd, timeout=timeout)
+    assert_wav(output)
+
+    output = work_dir / "cli-stdin.wav"
+    cmd = append_config([str(binary), "--model", str(model), "--output_file", str(output),
+                         "--quiet"], config)
+    run_command(cmd, timeout=timeout, input_text=text + "\nTexto desde stdin.\n")
+    assert_wav(output)
+
+    output = work_dir / "cli-json.wav"
+    json_line = json.dumps({"text": text, "output_file": str(output)}, ensure_ascii=False) + "\n"
+    cmd = append_config([str(binary), "--model", str(model), "--json-input", "--quiet"], config)
+    run_command(cmd, timeout=timeout, input_text=json_line)
+    assert_wav(output)
+
+    output_dir = work_dir / "cli-output-dir"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cmd = append_config([str(binary), "--model", str(model), "--text", text,
+                         "--output_dir", str(output_dir), "--quiet"], config)
+    run_command(cmd, timeout=timeout)
+    assert_wav(newest_wav(output_dir))
+
+    if not skip_raw:
+        cmd = append_config([str(binary), "--model", str(model), "--output_raw", "--quiet"], config)
+        completed = run_binary_command(cmd, timeout=timeout,
+                                       input_bytes=(text + "\n").encode("utf-8"))
+        assert_raw_audio(completed.stdout, "cli-output-raw")
 
 
 def run_tts_request(base_url: str, text: str, token: str | None, timeout: int,
@@ -347,6 +421,7 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=180, help="Timeout por operacion en segundos")
     parser.add_argument("--skip-cli", action="store_true", help="No probar sintesis CLI")
     parser.add_argument("--skip-api", action="store_true", help="No levantar/probar API HTTP")
+    parser.add_argument("--skip-cli-raw", action="store_true", help="No probar --output_raw en CLI")
     parser.add_argument("--keep-temp", action="store_true", help="Conservar carpeta temporal de resultados")
     parser.add_argument("--stress-api-requests", type=int, default=2,
                         help="Peticiones TTS concurrentes de texto largo para detectar problemas de eSpeak/model cache")
@@ -368,7 +443,7 @@ def main(argv: Iterable[str]) -> int:
     log(f"Temp: {temp_root}")
     try:
         if not args.skip_cli:
-            test_cli(binary, model, config, args.text, temp_root, args.timeout)
+            test_cli(binary, model, config, args.text, temp_root, args.timeout, args.skip_cli_raw)
         if not args.skip_api:
             token = args.api_token.strip() or None
             test_api(binary, models_dir, args.text, temp_root, token, args.timeout, args.stress_api_requests)

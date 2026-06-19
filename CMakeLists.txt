@@ -47,6 +47,8 @@ set(PIPER_APP_SOURCES
   src/cpp/app/resource_policy.cpp
   src/cpp/app/piper_app.cpp
   src/cpp/app/platform.cpp
+  src/cpp/app/platform_console.cpp
+  src/cpp/app/platform_paths.cpp
   src/cpp/app/raw_audio_output.cpp
   src/cpp/app/server_mode.cpp
   src/cpp/app/synthesis_input.cpp

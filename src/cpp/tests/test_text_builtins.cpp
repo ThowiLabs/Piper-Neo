@@ -12,10 +12,8 @@ namespace {
 void requireEqual(const std::string &name, const std::string &got,
                   const std::string &expected) {
   if (got != expected) {
-    std::cerr << "FAIL: " << name << "
-expected: " << expected
-              << "
-got:      " << got << std::endl;
+    std::cerr << "FAIL: " << name << "\nexpected: " << expected
+              << "\ngot:      " << got << std::endl;
     std::exit(1);
   }
 }

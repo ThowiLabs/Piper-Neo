@@ -18,7 +18,7 @@
 #include <sys/socket.h>
 #endif
 
-#include "types.hpp"
+#include "http_types.hpp"
 
 namespace piper_server {
 

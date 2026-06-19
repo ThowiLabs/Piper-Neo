@@ -218,3 +218,26 @@ ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text
 - Ampliar pruebas funcionales de `.neo` para cubrir export zstd real cuando zstd esté disponible.
 - Agregar pruebas HTTP unitarias para `routes/*` usando un writer/socket simulado.
 - Evaluar CMake moderno por targets si se decide tocar el sistema de build con más calma.
+
+## Refactor HTTP y catálogo de modelos
+
+El servidor HTTP base ya no concentra socket I/O, escritura de respuestas y helpers de URL en `server/http.cpp`. La capa quedó dividida en:
+
+```text
+src/cpp/server/http.cpp                  Lectura y parseo básico de request HTTP.
+src/cpp/server/http/socket_io.cpp        E/S de sockets y cierre multiplataforma.
+src/cpp/server/http/response_writer.cpp  Respuestas HTTP/JSON y envío de archivos.
+src/cpp/server/http/url.cpp              Query params, URL decode y rutas dinámicas.
+src/cpp/server/http_types.hpp            Tipos HTTP ligeros sin depender de ONNX/Piper.
+```
+
+El registro de modelos también se separó:
+
+```text
+src/cpp/server/model_registry.cpp   Cache, refresh y lookup por nombre.
+src/cpp/server/model_metadata.cpp   Conversión de metadata/config a JSON público.
+src/cpp/server/model_scanner.cpp    Escaneo de `.onnx` y `.neo` en `modelsDir`.
+src/cpp/server/model_paths.cpp      Claves canónicas compartidas por registry/cache.
+```
+
+Esta separación mantiene el contrato público del servidor pero reduce acoplamiento y facilita pruebas unitarias pequeñas como `test_http_parser`.

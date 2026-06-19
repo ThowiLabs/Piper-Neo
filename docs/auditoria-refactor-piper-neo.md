@@ -92,3 +92,14 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 ## Estado recomendado
 
 El repo está listo como base pública del motor Piper Neo. El refactor grande de `.neo`, la separación de modos de aplicación, la limpieza de CLI, sanitizer y markup TTS ya fueron aplicados; el siguiente paso recomendable es agregar pruebas HTTP pequeñas y separar `http.cpp` si crece el parser/socket IO.
+
+## Avance posterior: HTTP base y modelos
+
+- `src/cpp/server/http.cpp`: dividido para separar parser de request, socket I/O, respuestas y URL/query helpers.
+- `src/cpp/server/http_types.hpp`: tipos HTTP ligeros separados de `server/types.hpp`, evitando arrastrar `piper.hpp`/ONNX a pruebas simples.
+- `src/cpp/server/model_registry.cpp`: reducido a cache/refresh/lookup.
+- `src/cpp/server/model_metadata.cpp`: extrae construcción de JSON público de modelos.
+- `src/cpp/server/model_scanner.cpp`: extrae escaneo de `.onnx`/`.neo`.
+- `src/cpp/server/model_paths.cpp`: centraliza `modelKey()` para eliminar duplicación con `model_cache.cpp`.
+
+Pendiente: pruebas funcionales para scanner/metadata/cache y refactor cuidadoso de `tts_scheduler.cpp`.

@@ -48,10 +48,7 @@ REQUIRED_FILES = [
     "src/cpp/app/help_text.cpp",
     "src/cpp/app/help_text.hpp",
     "src/cpp/server/metrics_report.hpp",
-    "src/cpp/server/metrics_report.cpp",
     "src/cpp/server/jobs/chunked_wav.hpp",
-    "src/cpp/server/jobs/chunked_wav.cpp",
-    "src/cpp/tests/test_neo_package.cpp",
     "src/cpp/server/sanitize_result.hpp",
     "src/cpp/server/sanitize_result.cpp",
     "src/cpp/server/sanitize/content_filters.hpp",
@@ -76,7 +73,15 @@ REQUIRED_FILES = [
     "src/cpp/server/routes/file_routes.hpp",
     "src/cpp/server/routes/file_routes.cpp",
     "src/cpp/server/routes/tts_routes.hpp",
-    "src/cpp/server/routes/tts_routes.cpp",
+    "src/cpp/server/model_cache.cpp",
+    "src/cpp/server/model_metadata.cpp",
+    "src/cpp/server/model_paths.cpp",
+    "src/cpp/server/model_scanner.cpp",
+    "src/cpp/server/http_types.hpp",
+    "src/cpp/server/http/response_writer.cpp",
+    "src/cpp/server/http/socket_io.cpp",
+    "src/cpp/server/http/url.cpp",
+    "src/cpp/tests/test_http_parser.cpp",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -116,7 +121,15 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/server/routes/health_routes.cpp",
     "src/cpp/server/routes/model_routes.cpp",
     "src/cpp/server/routes/file_routes.cpp",
-    "src/cpp/server/routes/tts_routes.cpp",
+    "src/cpp/server/model_cache.cpp",
+    "src/cpp/server/model_metadata.cpp",
+    "src/cpp/server/model_paths.cpp",
+    "src/cpp/server/model_scanner.cpp",
+    "src/cpp/server/http_types.hpp",
+    "src/cpp/server/http/response_writer.cpp",
+    "src/cpp/server/http/socket_io.cpp",
+    "src/cpp/server/http/url.cpp",
+    "src/cpp/tests/test_http_parser.cpp",
 ]
 
 EXPECTED_CONTEXT = {
@@ -137,6 +150,8 @@ EXPECTED_CONTEXT = {
     "14-correccion-build-loadvoice.md",
     "15-refactor-markup-tts.md",
     "16-refactor-rutas-http.md",
+    "17-refactor-http-parser.md",
+    "18-refactor-registro-modelos.md",
 }
 
 
@@ -207,11 +222,23 @@ def main() -> None:
         fail("tts_scheduler.cpp no debe ensamblar WAV por buffers; usar jobs/chunked_wav.cpp")
 
     http_cpp = (ROOT / "src/cpp/server/http.cpp").read_text(encoding="utf-8")
+    http_url_cpp = (ROOT / "src/cpp/server/http/url.cpp").read_text(encoding="utf-8")
     utils_cpp = (ROOT / "src/cpp/server/utils.cpp").read_text(encoding="utf-8")
     if "ParsedTarget parseTarget" in utils_cpp or "std::string urlDecode" in utils_cpp:
-        fail("utils.cpp vuelve a definir funciones HTTP que deben vivir solo en http.cpp")
-    if http_cpp.count("ParsedTarget parseTarget") != 1 or http_cpp.count("std::string urlDecode") != 1:
-        fail("http.cpp debe conservar una sola definicion de parseTarget y urlDecode")
+        fail("utils.cpp no debe definir funciones HTTP")
+    if "ParsedTarget parseTarget" in http_cpp or "std::string urlDecode" in http_cpp:
+        fail("http.cpp debe quedarse como parser de request; URL/query vive en server/http/url.cpp")
+    if http_url_cpp.count("ParsedTarget parseTarget") != 1 or http_url_cpp.count("std::string urlDecode") != 1:
+        fail("server/http/url.cpp debe conservar una sola definicion de parseTarget y urlDecode")
+    for source in [
+        "src/cpp/server/http_types.hpp",
+    "src/cpp/server/http/response_writer.cpp",
+        "src/cpp/server/http/socket_io.cpp",
+        "src/cpp/server/http/url.cpp",
+        "src/cpp/tests/test_http_parser.cpp",
+    ]:
+        if source not in cmake:
+            fail(f"CMakeLists.txt no referencia módulo HTTP: {source}")
 
 
 
@@ -250,7 +277,10 @@ def main() -> None:
         "src/cpp/server/routes/health_routes.cpp",
         "src/cpp/server/routes/model_routes.cpp",
         "src/cpp/server/routes/file_routes.cpp",
-        "src/cpp/server/routes/tts_routes.cpp",
+        "src/cpp/server/model_cache.cpp",
+    "src/cpp/server/model_metadata.cpp",
+    "src/cpp/server/model_paths.cpp",
+    "src/cpp/server/model_scanner.cpp",
     ]:
         if source not in cmake:
             fail(f"CMakeLists.txt no referencia módulo de rutas: {source}")

@@ -11,25 +11,11 @@
 #include <string>
 #include <vector>
 
-#include "../json.hpp"
 #include "../piper.hpp"
+#include "http_types.hpp"
 #include "sanitize_result.hpp"
 
 namespace piper_server {
-
-using json = nlohmann::json;
-
-struct HttpRequest {
-  std::string method;
-  std::string path;
-  std::string body;
-  std::map<std::string, std::string> headers;
-};
-
-struct ParsedTarget {
-  std::string path;
-  std::map<std::string, std::string> query;
-};
 
 struct ServerMetrics {
   std::atomic<std::uint64_t> acceptedJobs{0};

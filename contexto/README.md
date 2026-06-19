@@ -68,3 +68,7 @@ Mantener estos archivos actualizados cuando cambien arquitectura, build, API, no
 
 Probar el build real de Windows después del refactor de rutas HTTP y ampliar pruebas funcionales de CLI, HTTP, sanitizer, markup y `.neo` con compresión zstd cuando esté disponible.
 - `16-refactor-rutas-http.md`: separación de rutas HTTP del servidor en módulos dedicados.
+
+- `17-refactor-http-parser.md`: separación de parser HTTP, socket I/O, respuestas y helpers URL.
+
+- `18-refactor-registro-modelos.md`: separación de metadata, scanner y claves canónicas del registro de modelos.

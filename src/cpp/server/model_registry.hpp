@@ -9,11 +9,11 @@
 
 #include "../server.hpp"
 #include "types.hpp"
+#include "model_metadata.hpp"
+#include "model_scanner.hpp"
 
 namespace piper_server {
 
-bool modelJsonHasImage(const json &root);
-json modelInfoToJson(const ModelInfo &modelInfo, const std::string &includeMode);
 std::optional<ModelInfo> findModelByName(const ServerOptions &options,
                                          const std::string &requestedModel,
                                          class ModelRegistry *registry = nullptr);

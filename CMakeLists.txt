@@ -62,6 +62,10 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server.cpp
   src/cpp/server/auth.cpp
   src/cpp/server/http.cpp
+  src/cpp/server/http_types.hpp
+  src/cpp/server/http/response_writer.cpp
+  src/cpp/server/http/socket_io.cpp
+  src/cpp/server/http/url.cpp
   src/cpp/server/jobs/chunked_wav.cpp
   src/cpp/server/markup/audio_parts.cpp
   src/cpp/server/markup/markup_parser.cpp
@@ -69,7 +73,10 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/markup_tts.cpp
   src/cpp/server/metrics_report.cpp
   src/cpp/server/model_cache.cpp
+  src/cpp/server/model_metadata.cpp
+  src/cpp/server/model_paths.cpp
   src/cpp/server/model_registry.cpp
+  src/cpp/server/model_scanner.cpp
   src/cpp/server/output_cleanup.cpp
   src/cpp/server/request_handler.cpp
   src/cpp/server/responses.cpp
@@ -154,6 +161,12 @@ if(PIPER_BUILD_TESTS)
     src/cpp/tests/test_markup_parser.cpp
     src/cpp/server/markup/markup_parser.cpp
     src/cpp/server/markup/request_options.cpp
+    src/cpp/server/utils.cpp
+  )
+
+  add_executable(test_http_parser
+    src/cpp/tests/test_http_parser.cpp
+    src/cpp/server/http/url.cpp
     src/cpp/server/utils.cpp
   )
 endif()
@@ -302,6 +315,7 @@ if(PIPER_BUILD_TESTS)
   target_compile_features(test_neo_package PUBLIC cxx_std_17)
   target_compile_features(test_text_sanitizer PUBLIC cxx_std_17)
   target_compile_features(test_markup_parser PUBLIC cxx_std_17)
+  target_compile_features(test_http_parser PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -325,6 +339,11 @@ if(PIPER_BUILD_TESTS)
     test_markup_parser PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
     ${PIPER_PHONEMIZE_DIR}/include
+  )
+
+  target_include_directories(
+    test_http_parser PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
   )
 
   target_link_directories(
@@ -355,6 +374,11 @@ if(PIPER_BUILD_TESTS)
   add_test(
     NAME test_markup_parser
     COMMAND test_markup_parser
+  )
+
+  add_test(
+    NAME test_http_parser
+    COMMAND test_http_parser
   )
 endif()
 

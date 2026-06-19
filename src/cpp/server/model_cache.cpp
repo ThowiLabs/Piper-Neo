@@ -11,28 +11,10 @@
 #include <spdlog/spdlog.h>
 
 #include "../neo_model.hpp"
+#include "model_paths.hpp"
 #include "utils.hpp"
 
 namespace piper_server {
-namespace {
-
-std::string modelKey(const std::filesystem::path &modelPath) {
-  std::error_code ignored;
-  auto absolutePath = std::filesystem::absolute(modelPath, ignored);
-  if (ignored) {
-    return modelPath.lexically_normal().string();
-  }
-
-  auto canonicalPath = std::filesystem::weakly_canonical(absolutePath, ignored);
-  if (ignored) {
-    return absolutePath.lexically_normal().string();
-  }
-
-  return canonicalPath.string();
-}
-
-} // namespace
-
 ModelRuntime::ModelRuntime(ModelInfo modelInfo) : info(std::move(modelInfo)) {}
 
 VoiceLease::VoiceLease(std::shared_ptr<ModelRuntime> modelRuntime, VoiceSlot *voiceSlot)

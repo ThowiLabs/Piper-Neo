@@ -291,3 +291,8 @@ More details are available in `docs/core-architecture.md` and `contexto/`.
 ## Upstream
 
 Piper Neo is derived from [rhasspy/piper](https://github.com/rhasspy/piper). Respect the upstream license and attribution when redistributing binaries or source code.
+
+
+### HTTP modular y catálogo de modelos
+
+El servidor de Piper Neo separa rutas, parser HTTP, socket I/O, respuestas, sanitizer, markup TTS y catálogo/cache de modelos en módulos internos pequeños. Esto permite mantener la API TTS sin convertir `server.cpp` o `request_handler.cpp` en archivos monolíticos.

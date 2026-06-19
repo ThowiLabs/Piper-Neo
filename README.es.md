@@ -290,3 +290,8 @@ Más detalles en `docs/core-architecture.md` y `contexto/`.
 ## Proyecto base
 
 Piper Neo deriva de [rhasspy/piper](https://github.com/rhasspy/piper). Respeta la licencia y atribución del proyecto base al redistribuir binarios o código fuente.
+
+
+### HTTP modular y catálogo de modelos
+
+El servidor de Piper Neo separa rutas, parser HTTP, socket I/O, respuestas, sanitizer, markup TTS y catálogo/cache de modelos en módulos internos pequeños. Esto permite mantener la API TTS sin convertir `server.cpp` o `request_handler.cpp` en archivos monolíticos.

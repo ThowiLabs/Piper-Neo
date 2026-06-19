@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "../server.hpp"
-#include "types.hpp"
+#include "http_types.hpp"
 #include "model_metadata.hpp"
 #include "model_scanner.hpp"
 

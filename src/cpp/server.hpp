@@ -8,7 +8,13 @@
 #include <string>
 #include <vector>
 
-#include "piper/types.hpp"
+namespace piper {
+
+typedef int64_t SpeakerId;
+struct PiperConfig;
+struct Voice;
+
+} // namespace piper
 
 namespace piper_server {
 

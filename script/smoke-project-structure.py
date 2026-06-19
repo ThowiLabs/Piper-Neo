@@ -20,6 +20,8 @@ REQUIRED_FILES = [
     "src/cpp/core/piper_runtime.cpp",
     "src/cpp/core/sentence_splitter.hpp",
     "src/cpp/core/sentence_splitter.cpp",
+    "src/cpp/core/sentence/boundary_detector.hpp",
+    "src/cpp/core/sentence/boundary_detector.cpp",
     "src/cpp/core/synthesis_pipeline.cpp",
     "src/cpp/core/pipeline/phonemizer.hpp",
     "src/cpp/core/pipeline/phonemizer.cpp",
@@ -124,12 +126,15 @@ REQUIRED_FILES = [
     "src/cpp/tests/test_text_chunker.cpp",
     "src/cpp/tests/test_resource_policy.cpp",
     "src/cpp/tests/test_tts_request.cpp",
+    "src/cpp/tests/test_sentence_splitter.cpp",
+    "src/cpp/tests/test_model_registry.cpp",
     "script/smoke-piper-binary.py",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
     "src/cpp/core/model_runtime.cpp",
     "src/cpp/core/piper_runtime.cpp",
+    "src/cpp/core/sentence/boundary_detector.cpp",
     "src/cpp/core/sentence_splitter.cpp",
     "src/cpp/core/synthesis_pipeline.cpp",
     "src/cpp/core/pipeline/phonemizer.cpp",
@@ -193,7 +198,10 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/tests/test_markup_parser.cpp",
     "src/cpp/tests/test_http_parser.cpp",
     "src/cpp/tests/test_text_chunker.cpp",
-    "src/cpp/tests/test_resource_policy.cpp",]
+    "src/cpp/tests/test_resource_policy.cpp",
+    "src/cpp/tests/test_tts_request.cpp",
+    "src/cpp/tests/test_sentence_splitter.cpp",
+    "src/cpp/tests/test_model_registry.cpp",]
 
 EXPECTED_CONTEXT = {
     "README.md",
@@ -225,6 +233,7 @@ EXPECTED_CONTEXT = {
     "26-refactor-wav-utils-docs.md",
     "27-refactor-tts-route-request.md",
     "28-correccion-build-data-image-route.md",
+    "29-refactor-sentence-splitter-model-tests.md",
 }
 
 
@@ -256,6 +265,7 @@ def main() -> None:
         "src/cpp/app/cli_args.cpp": 280,
         "src/cpp/app/hardware.cpp": 80,
         "src/cpp/core/text_chunker.cpp": 80,
+        "src/cpp/core/sentence_splitter.cpp": 80,
         "src/cpp/core/wav_stream_writer.cpp": 120,
         "src/cpp/server/utils.cpp": 120,
         "src/cpp/server/tts_scheduler.cpp": 260,

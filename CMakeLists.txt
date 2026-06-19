@@ -124,6 +124,7 @@ set(PIPER_CORE_SOURCES
   src/cpp/piper.cpp
   src/cpp/core/model_runtime.cpp
   src/cpp/core/piper_runtime.cpp
+  src/cpp/core/sentence/boundary_detector.cpp
   src/cpp/core/sentence_splitter.cpp
   src/cpp/core/synthesis_pipeline.cpp
   src/cpp/core/pipeline/phonemizer.cpp
@@ -155,6 +156,7 @@ if(PIPER_BUILD_TESTS)
     src/cpp/piper.cpp
     src/cpp/core/model_runtime.cpp
     src/cpp/core/piper_runtime.cpp
+    src/cpp/core/sentence/boundary_detector.cpp
     src/cpp/core/sentence_splitter.cpp
     src/cpp/core/synthesis_pipeline.cpp
     src/cpp/core/pipeline/phonemizer.cpp
@@ -213,6 +215,21 @@ if(PIPER_BUILD_TESTS)
     src/cpp/tests/test_tts_request.cpp
     src/cpp/server/routes/tts_request.cpp
     src/cpp/server/markup/request_options.cpp
+  )
+
+  add_executable(test_sentence_splitter
+    src/cpp/tests/test_sentence_splitter.cpp
+    src/cpp/core/sentence/boundary_detector.cpp
+    src/cpp/core/sentence_splitter.cpp
+  )
+
+  add_executable(test_model_registry
+    src/cpp/tests/test_model_registry.cpp
+    src/cpp/server/model_metadata.cpp
+    src/cpp/server/model_registry.cpp
+    src/cpp/server/model_scanner.cpp
+    src/cpp/server/utils.cpp
+    ${PIPER_NEO_SOURCES}
   )
 endif()
 
@@ -364,6 +381,8 @@ if(PIPER_BUILD_TESTS)
   target_compile_features(test_text_chunker PUBLIC cxx_std_17)
   target_compile_features(test_resource_policy PUBLIC cxx_std_17)
   target_compile_features(test_tts_request PUBLIC cxx_std_17)
+  target_compile_features(test_sentence_splitter PUBLIC cxx_std_17)
+  target_compile_features(test_model_registry PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -406,6 +425,16 @@ if(PIPER_BUILD_TESTS)
 
   target_include_directories(
     test_tts_request PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_sentence_splitter PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_model_registry PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
   )
 
@@ -457,6 +486,16 @@ if(PIPER_BUILD_TESTS)
   add_test(
     NAME test_tts_request
     COMMAND test_tts_request
+  )
+
+  add_test(
+    NAME test_sentence_splitter
+    COMMAND test_sentence_splitter
+  )
+
+  add_test(
+    NAME test_model_registry
+    COMMAND test_model_registry "${CMAKE_CURRENT_BINARY_DIR}/test-model-registry"
   )
 endif()
 

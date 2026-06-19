@@ -47,6 +47,7 @@ Leer en este orden:
 26. `26-refactor-wav-utils-docs.md`
 27. `27-refactor-tts-route-request.md`
 28. `28-correccion-build-data-image-route.md`
+29. `29-refactor-sentence-splitter-model-tests.md`
 
 # Librerías usadas
 
@@ -77,8 +78,9 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` vive en `src/cpp/neo/`, `neo_model.cpp` es fachada pública, los modos CLI viven bajo `src/cpp/app/`, `piper.hpp` es fachada pública, el scheduler delega estado/WAV/chunks a módulos `server/jobs/`, el sanitizer vive en `server/sanitize/`, markup TTS vive en `server/markup/`, rutas HTTP viven en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader, chunking de texto vive en `core/text/`, la política de recursos vive separada de detección de hardware, la fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto, `model_cache` evita cargas iniciales concurrentes, el streaming WAV ahora separa header/parcheo de chunks de audio, `/api/v1/tts` separa request JSON/payload de respuesta de la coordinación de síntesis y `model_routes.cpp` usa explícitamente `server/media/data_image.hpp` para imágenes embebidas.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` vive en `src/cpp/neo/`, `neo_model.cpp` es fachada pública, los modos CLI viven bajo `src/cpp/app/`, `piper.hpp` es fachada pública, el scheduler delega estado/WAV/chunks a módulos `server/jobs/`, el sanitizer vive en `server/sanitize/`, markup TTS vive en `server/markup/`, rutas HTTP viven en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader, chunking de texto vive en `core/text/`, la política de recursos vive separada de detección de hardware, la fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto, `model_cache` evita cargas iniciales concurrentes, el streaming WAV ahora separa header/parcheo de chunks de audio, `/api/v1/tts` separa request JSON/payload de respuesta de la coordinación de síntesis y `model_routes.cpp` usa explícitamente `server/media/data_image.hpp` para imágenes embebidas, el splitter explícito de oraciones delega reglas a `core/sentence/boundary_detector.*` y existen pruebas fake para `ModelRegistry`/`scanModels`.
 
 # Próximos pasos
 
 Probar el build real de Windows y ejecutar `script/smoke-piper-binary.py --models <ruta>` para validar CLI, API, TTS y descarga WAV con modelos reales.
+

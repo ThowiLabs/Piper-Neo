@@ -65,14 +65,14 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 1. `src/cpp/app/synthesis_mode.cpp`: agregar pruebas de stdin, JSON input, output WAV y RAW.
 2. Pruebas CLI: validar combinaciones de flags, `--help`, `--version`, `--server` y export `.neo`.
 3. `.neo`: ampliar prueba para export zstd real cuando zstd esté disponible.
-4. Server: agregar smoke HTTP para health, modelos, TTS y descarga de archivos.
+4. Server: el smoke del binario ya valida health, modelos, TTS y descarga de archivos; falta prueba con socket simulado dentro de CTest si se requiere.
 
 ### Prioridad media
 
-1. `src/cpp/server/tts_scheduler.cpp`: seguir separando estado/job runner si crece la concurrencia.
+1. `src/cpp/server/tts_scheduler.cpp`: ya separa estado, ciclo de vida y worker de chunks; seguir separando solo si crece la concurrencia.
 2. `src/cpp/server/request_handler.cpp`: ya separa rutas; falta prueba HTTP con sockets simulados.
 3. `src/cpp/server/markup_tts.cpp`: ya separa parser/opciones/audio; falta prueba de integración HTTP/WAV real.
-4. `src/cpp/server/text_sanitizer.cpp`: ya está modular; ampliar pruebas con payloads HTTP reales.
+4. `src/cpp/server/model_registry.cpp`: cuenta con test fake de scanner/metadata/resolución; falta cache con ONNX real si se requiere.
 
 ### Prioridad baja
 
@@ -142,4 +142,11 @@ Pendiente: agregar pruebas unitarias más profundas para WAV streaming sin depen
 - `src/cpp/server/routes/tts_request.*`: concentra validación de `text`, `model`, `default_model`, `speaker_id`, aliases de opciones y límites de entrada.
 - `src/cpp/server/routes/tts_payload.*`: concentra el payload estándar de éxito TTS.
 
-Pendiente: agregar `test_tts_request.cpp` para validar errores de request sin depender del servidor real.
+Implementado: `test_tts_request.cpp` valida errores de request sin depender del servidor real.
+
+## Avance posterior: sentence splitter y registro de modelos
+
+- `src/cpp/core/sentence_splitter.cpp`: queda como orquestador de chunks explícitos.
+- `src/cpp/core/sentence/boundary_detector.*`: concentra reglas de límites de oración, abreviaturas, decimales, comillas, puntos suspensivos, saltos de línea y UTF-8.
+- `src/cpp/tests/test_sentence_splitter.cpp`: valida reglas de segmentación sin cargar modelos.
+- `src/cpp/tests/test_model_registry.cpp`: valida scanner, metadata JSON, resolución por nombre/stem, fallback a modelo activo y rechazo de nombres inseguros usando archivos fake.

@@ -252,10 +252,8 @@ python3 script/smoke-text-normalizer.py
 python3 script/smoke-project-structure.py
 cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
-cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
-cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
-cmake --build /tmp/piper-neo-cmake-check-tests --target test_markup_parser
-ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser|test_http_parser" --output-on-failure
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package test_text_sanitizer test_markup_parser test_http_parser test_text_chunker test_resource_policy test_tts_request test_sentence_splitter test_model_registry
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser|test_http_parser|test_text_chunker|test_resource_policy|test_tts_request|test_sentence_splitter|test_model_registry" --output-on-failure
 # Después de compilar el binario final, prueba CLI + API con modelos reales:
 python script/smoke-piper-binary.py --models models
 # También puedes indicar el binario manualmente:
@@ -294,6 +292,8 @@ Más detalles en `docs/core-architecture.md` y `contexto/`.
 - `docs/text-preprocessing.md`: sanitizado server-side para TTS.
 - `docs/markup-tts.md`: markup local multi-voz.
 - `neo-docs/neo-format.md`: formato de paquete `.neo`.
+- `src/cpp/tests/test_sentence_splitter.cpp`: pruebas de límites de oración para puntuación española, abreviaturas, decimales, puntos suspensivos y saltos de línea.
+- `src/cpp/tests/test_model_registry.cpp`: pruebas fake del catálogo de modelos, metadata y resolución segura.
 
 ## Proyecto base
 

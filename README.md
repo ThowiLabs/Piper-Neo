@@ -252,10 +252,8 @@ python3 script/smoke-text-normalizer.py
 python3 script/smoke-project-structure.py
 cmake -S . -B /tmp/piper-neo-cmake-check -DPIPER_BUILD_TESTS=OFF
 cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
-cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
-cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
-cmake --build /tmp/piper-neo-cmake-check-tests --target test_markup_parser
-ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser|test_http_parser" --output-on-failure
+cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package test_text_sanitizer test_markup_parser test_http_parser test_text_chunker test_resource_policy test_tts_request test_sentence_splitter test_model_registry
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser|test_http_parser|test_text_chunker|test_resource_policy|test_tts_request|test_sentence_splitter|test_model_registry" --output-on-failure
 # After building the final binary, test CLI + API with real models:
 python script/smoke-piper-binary.py --models models
 # You can also pass the binary explicitly:
@@ -293,6 +291,8 @@ More details are available in `docs/core-architecture.md` and `contexto/`.
 - `docs/text-preprocessing.md`: server-side TTS sanitizer.
 - `src/cpp/tests/test_text_sanitizer.cpp`: functional sanitizer coverage for URLs, emails, markup, code, emojis and invalid UTF-8.
 - `src/cpp/tests/test_markup_parser.cpp`: functional markup parser coverage for `<model>`, `<silence>`, speaker ids and request options.
+- `src/cpp/tests/test_sentence_splitter.cpp`: sentence boundary coverage for Spanish punctuation, abbreviations, decimals, ellipsis and line breaks.
+- `src/cpp/tests/test_model_registry.cpp`: fake model catalog coverage for scanner, metadata and safe model resolution.
 - `docs/markup-tts.md`: local multi-voice markup.
 - `neo-docs/neo-format.md`: `.neo` package format.
 

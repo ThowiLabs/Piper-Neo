@@ -80,7 +80,8 @@ text_chunker.cpp        Orquestador de chunks para textos largos.
 core/text/utf8_utils.*  Helpers de límites UTF-8 y whitespace.
 core/text/chunk_rules.* Reglas de corte por oración, párrafo, signos españoles y hard limit.
 sentence_splitter.hpp   Contrato interno para pausas explícitas.
-sentence_splitter.cpp   Detección de oración, abreviaturas, decimales y versiones.
+sentence_splitter.cpp   Orquestador de chunks explícitos y silencios entre oraciones.
+core/sentence/boundary_detector.* Reglas de oración: puntuación, comillas, decimales, abreviaturas, UTF-8 y saltos de línea.
 ```
 
 `src/cpp/piper.cpp` queda mínimo y conserva solo `getVersion()`. El contrato público mantiene compatibilidad por `piper.hpp`, pero internamente se separó en:
@@ -231,6 +232,8 @@ ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text
 - Ampliar `script/smoke-piper-binary.py` con más casos cuando se agreguen endpoints o flags nuevos.
 - Ampliar pruebas funcionales de `.neo` para cubrir export zstd real cuando zstd esté disponible.
 - Agregar pruebas HTTP unitarias para `routes/*` usando un writer/socket simulado.
+- `test_sentence_splitter` cubre abreviaturas, decimales, comillas, puntos suspensivos y saltos de línea.
+- `test_model_registry` cubre escaneo/resolución de modelos con fakes `.onnx`, `.json` y `.neo`.
 - Evaluar CMake moderno por targets si se decide tocar el sistema de build con más calma.
 
 ## Refactor HTTP y catálogo de modelos

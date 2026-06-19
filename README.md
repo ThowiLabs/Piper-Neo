@@ -267,9 +267,9 @@ python script/smoke-piper-binary.py --binary dist-winlibs/piper-neo-windows/pipe
 The C++ core is split by responsibility:
 
 - `src/cpp/main.cpp`: minimal binary entry point.
-- `src/cpp/app/`: CLI parsing, help text, validation, run configuration, hardware detection, environment resolution and execution modes for CLI/server/export/synthesis.
+- `src/cpp/app/`: CLI parsing, help text, validation, run configuration, hardware probing, resource policy, environment resolution and execution modes for CLI/server/export/synthesis.
 - `src/cpp/piper.hpp` and `src/cpp/piper/`: compatible public facade, public types and engine API.
-- `src/cpp/core/`: Piper runtime, voice loading, ONNX inference, chunking, synthesis pipeline and WAV streaming.
+- `src/cpp/core/`: Piper runtime, voice loading, ONNX inference, UTF-8 safe chunking, synthesis pipeline and WAV streaming.
 - `src/cpp/server.cpp`: local HTTP server runtime, sockets and accept loop.
 - `src/cpp/server/`: HTTP, auth, route dispatch, text sanitization, models, cache/runtime/loader, TTS scheduler, metrics, markup TTS, WAV, jobs and cleanup modules.
 - `src/cpp/server/routes/`: HTTP API routes split by responsibility: health/status/metrics, models/images, generated files and TTS synthesis.

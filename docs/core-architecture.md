@@ -48,7 +48,10 @@ run_config.hpp          Configuración de ejecución.
 cli_args.*              Parser de argumentos y asignación directa a RunConfig.
 help_text.*             Ayuda CLI y opciones visibles para usuario.
 cli_validation.*        Validación cruzada, rutas, modo servidor y resolución de modelo/config.
-hardware.*              Detección de CPU, memoria y límites cgroup.
+hardware.*              Orquestador de detección, política de recursos y logging.
+hardware_probe.*        Detección de CPU, memoria y límites cgroup.
+resource_limits.*       Límites puros de memoria temporal y réplicas.
+resource_policy.*       Perfiles auto/eco/balanced/fast/max y clamps de concurrencia.
 env.*                   Resolución de token desde argumento, entorno o .env.
 platform.*              Detalles del ejecutable y consola por plataforma.
 raw_audio_output.*      Escritura progresiva de audio RAW a stdout.
@@ -72,7 +75,10 @@ synthesis_pipeline.cpp  Normalización, tashkeel, fonemización, phoneme ids, fr
 wav_stream_writer.cpp   WAV progresivo, header seekable y lectura larga desde stdin.
 synthesis_utils.hpp     Utilidades internas compartidas.
 synthesis_utils.cpp     Cancelación, preview UTF-8, BOM/whitespace y silencios.
-text_chunker.cpp        Particionado inteligente UTF-8 para textos largos.
+text_chunker.hpp        Contrato ligero de particionado de texto.
+text_chunker.cpp        Orquestador de chunks para textos largos.
+core/text/utf8_utils.*  Helpers de límites UTF-8 y whitespace.
+core/text/chunk_rules.* Reglas de corte por oración, párrafo, signos españoles y hard limit.
 sentence_splitter.hpp   Contrato interno para pausas explícitas.
 sentence_splitter.cpp   Detección de oración, abreviaturas, decimales y versiones.
 ```

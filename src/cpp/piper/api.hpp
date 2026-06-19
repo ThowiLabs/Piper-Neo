@@ -9,15 +9,13 @@
 #include <vector>
 
 #include "types.hpp"
+#include "core/text_chunker.hpp"
 
 namespace piper {
 
 bool isSingleCodepoint(std::string s);
 Phoneme getCodepoint(std::string s);
 std::string getVersion();
-
-std::vector<std::string> splitTextIntoChunks(const std::string &text,
-                                             std::size_t maxChunkBytes);
 
 void initialize(PiperConfig &config);
 void terminate(PiperConfig &config);

@@ -76,14 +76,14 @@ Solución implementada: el sanitizador se separó en `server/sanitize_result.*` 
 
 ### Prioridad baja
 
-1. `src/cpp/core/text_chunker.cpp`: separar helpers UTF-8 y selección de cortes.
-2. `src/cpp/core/synthesis_pipeline.cpp`: separar stages cuando existan pruebas de audio suficientes.
-3. `src/cpp/app/hardware.cpp`: separar probe, perfiles y límites.
+1. `src/cpp/core/synthesis_pipeline.cpp`: separar stages cuando existan pruebas de audio suficientes.
+2. `src/cpp/app/platform.cpp`: revisar si conviene separar consola Windows, paths y entorno.
+3. `CMakeLists.txt`: ordenar secciones si crece más, evitando fragmentar el build sin necesidad.
 
 ## Pruebas recomendadas antes de más refactor
 
 - `.neo`: ya existe prueba mínima sin compresión; falta validar export zstd/no-zstd con zstd real.
-- Chunking: textos largos, signos `¿?`, `¡!`, URLs, decimales, abreviaturas y saltos de línea.
+- Chunking: `test_text_chunker` cubre límites de oración, signos españoles, UTF-8 y palabras largas; falta ampliar con URLs, correos, decimales y abreviaturas reales.
 - HTTP: GET, POST, query params, payload grande, headers malformados.
 - Sanitizer: `test_text_sanitizer` ya cubre texto normal, código, URLs/correos, markup, markdown, emoji, input enorme e UTF-8 inválido; falta probar integración HTTP.
 - Markup: `test_markup_parser` cubre `<model>`, `<silence>`, speakers y opciones request; falta integración con scheduler/WAV real.

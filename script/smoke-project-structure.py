@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Smoke test estructural del core Piper.
+"""Smoke test estructural del core Piper Neo.
 
-No compila dependencias nativas. Verifica que el refactor del core C++ siga
-referenciado en CMake y que contexto/ conserve la bitácora limpia del proyecto.
+No compila dependencias nativas. Verifica que el repo público siga sin apps,
+que CMake referencie los módulos refactorizados y que contexto/ conserve la
+bitácora técnica limpia.
 """
 from __future__ import annotations
 
@@ -12,17 +13,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_FILES = [
     "src/cpp/piper.cpp",
+    "src/cpp/piper.hpp",
     "src/cpp/piper/types.hpp",
     "src/cpp/piper/api.hpp",
     "src/cpp/core/model_runtime.cpp",
-    "src/cpp/core/model_runtime.hpp",
     "src/cpp/core/piper_runtime.cpp",
     "src/cpp/core/sentence_splitter.hpp",
     "src/cpp/core/sentence_splitter.cpp",
     "src/cpp/core/synthesis_pipeline.cpp",
     "src/cpp/core/synthesis_utils.hpp",
     "src/cpp/core/synthesis_utils.cpp",
+    "src/cpp/core/text_chunker.hpp",
     "src/cpp/core/text_chunker.cpp",
+    "src/cpp/core/text/chunk_rules.hpp",
+    "src/cpp/core/text/chunk_rules.cpp",
+    "src/cpp/core/text/utf8_utils.hpp",
+    "src/cpp/core/text/utf8_utils.cpp",
     "src/cpp/core/voice_loader.cpp",
     "src/cpp/core/wav_stream_writer.cpp",
     "src/cpp/neo/binary_io.cpp",
@@ -32,28 +38,34 @@ REQUIRED_FILES = [
     "src/cpp/neo/package_reader.cpp",
     "src/cpp/neo/package_writer.cpp",
     "src/cpp/neo_model.cpp",
+    "src/cpp/app/cli_validation.cpp",
+    "src/cpp/app/cli_validation.hpp",
+    "src/cpp/app/help_text.cpp",
+    "src/cpp/app/help_text.hpp",
     "src/cpp/app/export_neo_mode.cpp",
     "src/cpp/app/export_neo_mode.hpp",
+    "src/cpp/app/hardware.cpp",
+    "src/cpp/app/hardware_probe.hpp",
+    "src/cpp/app/hardware_probe.cpp",
+    "src/cpp/app/resource_limits.hpp",
+    "src/cpp/app/resource_limits.cpp",
+    "src/cpp/app/resource_policy.hpp",
+    "src/cpp/app/resource_policy.cpp",
     "src/cpp/app/server_mode.cpp",
     "src/cpp/app/server_mode.hpp",
     "src/cpp/app/synthesis_mode.cpp",
     "src/cpp/app/synthesis_mode.hpp",
     "src/cpp/app/voice_runtime.cpp",
+    "src/cpp/app/voice_runtime.hpp",
+    "src/cpp/server/metrics_report.hpp",
     "src/cpp/server/metrics_report.cpp",
     "src/cpp/server/jobs/chunk_worker.hpp",
     "src/cpp/server/jobs/chunk_worker.cpp",
+    "src/cpp/server/jobs/chunked_wav.hpp",
     "src/cpp/server/jobs/chunked_wav.cpp",
     "src/cpp/server/jobs/job_lifecycle.hpp",
     "src/cpp/server/jobs/job_lifecycle.cpp",
     "src/cpp/server/jobs/job_state.hpp",
-    "src/cpp/tests/test_neo_package.cpp",
-    "src/cpp/app/voice_runtime.hpp",
-    "src/cpp/app/cli_validation.cpp",
-    "src/cpp/app/cli_validation.hpp",
-    "src/cpp/app/help_text.cpp",
-    "src/cpp/app/help_text.hpp",
-    "src/cpp/server/metrics_report.hpp",
-    "src/cpp/server/jobs/chunked_wav.hpp",
     "src/cpp/server/sanitize_result.hpp",
     "src/cpp/server/sanitize_result.cpp",
     "src/cpp/server/sanitize/content_filters.hpp",
@@ -62,14 +74,12 @@ REQUIRED_FILES = [
     "src/cpp/server/sanitize/risk_score.cpp",
     "src/cpp/server/sanitize/utf8_text.hpp",
     "src/cpp/server/sanitize/utf8_text.cpp",
-    "src/cpp/tests/test_text_sanitizer.cpp",
     "src/cpp/server/markup/markup_parser.hpp",
     "src/cpp/server/markup/markup_parser.cpp",
     "src/cpp/server/markup/request_options.hpp",
     "src/cpp/server/markup/request_options.cpp",
     "src/cpp/server/markup/audio_parts.hpp",
     "src/cpp/server/markup/audio_parts.cpp",
-    "src/cpp/tests/test_markup_parser.cpp",
     "src/cpp/server/routes/route_context.hpp",
     "src/cpp/server/routes/health_routes.hpp",
     "src/cpp/server/routes/health_routes.cpp",
@@ -78,17 +88,23 @@ REQUIRED_FILES = [
     "src/cpp/server/routes/file_routes.hpp",
     "src/cpp/server/routes/file_routes.cpp",
     "src/cpp/server/routes/tts_routes.hpp",
+    "src/cpp/server/routes/tts_routes.cpp",
+    "src/cpp/server/http_types.hpp",
+    "src/cpp/server/http/response_writer.cpp",
+    "src/cpp/server/http/socket_io.cpp",
+    "src/cpp/server/http/url.cpp",
     "src/cpp/server/model_cache.cpp",
     "src/cpp/server/model_loader.cpp",
     "src/cpp/server/model_runtime.cpp",
     "src/cpp/server/model_metadata.cpp",
     "src/cpp/server/model_paths.cpp",
     "src/cpp/server/model_scanner.cpp",
-    "src/cpp/server/http_types.hpp",
-    "src/cpp/server/http/response_writer.cpp",
-    "src/cpp/server/http/socket_io.cpp",
-    "src/cpp/server/http/url.cpp",
+    "src/cpp/tests/test_neo_package.cpp",
+    "src/cpp/tests/test_text_sanitizer.cpp",
+    "src/cpp/tests/test_markup_parser.cpp",
     "src/cpp/tests/test_http_parser.cpp",
+    "src/cpp/tests/test_text_chunker.cpp",
+    "src/cpp/tests/test_resource_policy.cpp",
     "script/smoke-piper-binary.py",
 ]
 
@@ -98,6 +114,8 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/core/sentence_splitter.cpp",
     "src/cpp/core/synthesis_pipeline.cpp",
     "src/cpp/core/synthesis_utils.cpp",
+    "src/cpp/core/text/chunk_rules.cpp",
+    "src/cpp/core/text/utf8_utils.cpp",
     "src/cpp/core/text_chunker.cpp",
     "src/cpp/core/voice_loader.cpp",
     "src/cpp/core/wav_stream_writer.cpp",
@@ -110,6 +128,9 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/neo_model.cpp",
     "src/cpp/app/cli_validation.cpp",
     "src/cpp/app/help_text.cpp",
+    "src/cpp/app/hardware_probe.cpp",
+    "src/cpp/app/resource_limits.cpp",
+    "src/cpp/app/resource_policy.cpp",
     "src/cpp/app/export_neo_mode.cpp",
     "src/cpp/app/server_mode.cpp",
     "src/cpp/app/synthesis_mode.cpp",
@@ -118,30 +139,33 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/server/jobs/chunk_worker.cpp",
     "src/cpp/server/jobs/chunked_wav.cpp",
     "src/cpp/server/jobs/job_lifecycle.cpp",
-    "src/cpp/tests/test_neo_package.cpp",
     "src/cpp/server/sanitize_result.cpp",
     "src/cpp/server/sanitize/content_filters.cpp",
     "src/cpp/server/sanitize/risk_score.cpp",
     "src/cpp/server/sanitize/utf8_text.cpp",
-    "src/cpp/tests/test_text_sanitizer.cpp",
     "src/cpp/server/markup/markup_parser.cpp",
     "src/cpp/server/markup/request_options.cpp",
     "src/cpp/server/markup/audio_parts.cpp",
-    "src/cpp/tests/test_markup_parser.cpp",
     "src/cpp/server/routes/health_routes.cpp",
     "src/cpp/server/routes/model_routes.cpp",
     "src/cpp/server/routes/file_routes.cpp",
+    "src/cpp/server/routes/tts_routes.cpp",
+    "src/cpp/server/http_types.hpp",
+    "src/cpp/server/http/response_writer.cpp",
+    "src/cpp/server/http/socket_io.cpp",
+    "src/cpp/server/http/url.cpp",
     "src/cpp/server/model_cache.cpp",
     "src/cpp/server/model_loader.cpp",
     "src/cpp/server/model_runtime.cpp",
     "src/cpp/server/model_metadata.cpp",
     "src/cpp/server/model_paths.cpp",
     "src/cpp/server/model_scanner.cpp",
-    "src/cpp/server/http_types.hpp",
-    "src/cpp/server/http/response_writer.cpp",
-    "src/cpp/server/http/socket_io.cpp",
-    "src/cpp/server/http/url.cpp",
+    "src/cpp/tests/test_neo_package.cpp",
+    "src/cpp/tests/test_text_sanitizer.cpp",
+    "src/cpp/tests/test_markup_parser.cpp",
     "src/cpp/tests/test_http_parser.cpp",
+    "src/cpp/tests/test_text_chunker.cpp",
+    "src/cpp/tests/test_resource_policy.cpp",
 ]
 
 EXPECTED_CONTEXT = {
@@ -167,11 +191,17 @@ EXPECTED_CONTEXT = {
     "19-refactor-scheduler-jobs.md",
     "20-smoke-binario-final.md",
     "21-refactor-cache-modelos.md",
+    "22-refactor-text-chunker.md",
+    "23-refactor-hardware-policy.md",
 }
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"ERROR: {message}")
+
+
+def line_count(relative: str) -> int:
+    return len((ROOT / relative).read_text(encoding="utf-8").splitlines())
 
 
 def main() -> None:
@@ -185,67 +215,42 @@ def main() -> None:
             fail(f"CMakeLists.txt no referencia {source}")
 
     if "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp" not in cmake:
-        fail("CMakeLists.txt no agrega src/cpp como include dir; los modulos core no podran incluir piper/api.hpp o piper/types.hpp")
+        fail("CMakeLists.txt no agrega src/cpp como include dir")
 
-    piper_lines = (ROOT / "src/cpp/piper.cpp").read_text(encoding="utf-8").splitlines()
-    if len(piper_lines) > 80:
-        fail(f"src/cpp/piper.cpp volvió a crecer demasiado: {len(piper_lines)} líneas")
+    max_lines = {
+        "src/cpp/piper.cpp": 80,
+        "src/cpp/piper.hpp": 20,
+        "src/cpp/neo_model.cpp": 140,
+        "src/cpp/app/cli_args.cpp": 280,
+        "src/cpp/app/hardware.cpp": 80,
+        "src/cpp/core/text_chunker.cpp": 80,
+        "src/cpp/server/tts_scheduler.cpp": 260,
+        "src/cpp/server/model_cache.cpp": 150,
+        "src/cpp/server/text_sanitizer.cpp": 120,
+        "src/cpp/server/markup_tts.cpp": 260,
+        "src/cpp/server/request_handler.cpp": 120,
+    }
+    for relative, max_allowed in max_lines.items():
+        count = line_count(relative)
+        if count > max_allowed:
+            fail(f"{relative} volvió a concentrar demasiada lógica: {count} líneas")
+
     piper_header = (ROOT / "src/cpp/piper.hpp").read_text(encoding="utf-8")
-    if '#include "piper/api.hpp"' not in piper_header or len(piper_header.splitlines()) > 20:
-        fail("src/cpp/piper.hpp debe quedar como fachada publica minima")
+    if '#include "piper/api.hpp"' not in piper_header:
+        fail("src/cpp/piper.hpp debe quedar como fachada pública mínima")
 
-
-    neo_model_lines = (ROOT / "src/cpp/neo_model.cpp").read_text(encoding="utf-8").splitlines()
-    if len(neo_model_lines) > 140:
-        fail(f"src/cpp/neo_model.cpp volvió a concentrar demasiada lógica: {len(neo_model_lines)} líneas")
-
-    cli_args_lines = (ROOT / "src/cpp/app/cli_args.cpp").read_text(encoding="utf-8").splitlines()
-    if len(cli_args_lines) > 280:
-        fail(f"src/cpp/app/cli_args.cpp volvió a concentrar help/validación: {len(cli_args_lines)} líneas")
-
-    for app_source in [
-        "src/cpp/app/cli_validation.cpp",
-        "src/cpp/app/help_text.cpp",
-    ]:
-        if app_source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo app: {app_source}")
-
-    for source in [
-        "src/cpp/neo/binary_io.cpp",
-        "src/cpp/neo/compression.cpp",
-        "src/cpp/neo/file_utils.cpp",
-        "src/cpp/neo/image_payload.cpp",
-        "src/cpp/neo/package_reader.cpp",
-        "src/cpp/neo/package_writer.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo .neo: {source}")
-
-    for source in [
-        "src/cpp/server/metrics_report.cpp",
-        "src/cpp/server/jobs/chunked_wav.cpp",
-        "src/cpp/tests/test_neo_package.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo servidor/pruebas: {source}")
-
+    piper_api = (ROOT / "src/cpp/piper/api.hpp").read_text(encoding="utf-8")
+    voice_loader = (ROOT / "src/cpp/core/voice_loader.cpp").read_text(encoding="utf-8")
+    if "const std::optional<SpeakerId> &speakerId" not in piper_api:
+        fail("loadVoice debe recibir speakerId como const reference")
+    if "const std::optional<SpeakerId> &speakerId" not in voice_loader:
+        fail("voice_loader.cpp debe mantener la firma const de speakerId")
 
     tts_scheduler_cpp = (ROOT / "src/cpp/server/tts_scheduler.cpp").read_text(encoding="utf-8")
-    if len(tts_scheduler_cpp.splitlines()) > 260:
-        fail(f"src/cpp/server/tts_scheduler.cpp volvió a concentrar demasiada lógica: {len(tts_scheduler_cpp.splitlines())} líneas")
-    for source in [
-        "src/cpp/server/jobs/chunk_worker.cpp",
-        "src/cpp/server/jobs/job_lifecycle.cpp",
-        "script/smoke-piper-binary.py",
-    ]:
-        if source not in cmake and not source.startswith("script/"):
-            fail(f"CMakeLists.txt no referencia módulo scheduler: {source}")
-        if source.startswith("script/") and not (ROOT / source).exists():
-            fail(f"falta smoke script: {source}")
     if "json resourcePolicyJson" in tts_scheduler_cpp or "json metricsJson" in tts_scheduler_cpp:
         fail("tts_scheduler.cpp no debe contener reportes JSON de métricas")
     if "std::array<char, 64 * 1024>" in tts_scheduler_cpp:
-        fail("tts_scheduler.cpp no debe ensamblar WAV por buffers; usar jobs/chunked_wav.cpp")
+        fail("tts_scheduler.cpp no debe ensamblar WAV por buffers")
 
     http_cpp = (ROOT / "src/cpp/server/http.cpp").read_text(encoding="utf-8")
     http_url_cpp = (ROOT / "src/cpp/server/http/url.cpp").read_text(encoding="utf-8")
@@ -253,93 +258,17 @@ def main() -> None:
     if "ParsedTarget parseTarget" in utils_cpp or "std::string urlDecode" in utils_cpp:
         fail("utils.cpp no debe definir funciones HTTP")
     if "ParsedTarget parseTarget" in http_cpp or "std::string urlDecode" in http_cpp:
-        fail("http.cpp debe quedarse como parser de request; URL/query vive en server/http/url.cpp")
+        fail("http.cpp debe quedarse como parser de request")
     if http_url_cpp.count("ParsedTarget parseTarget") != 1 or http_url_cpp.count("std::string urlDecode") != 1:
-        fail("server/http/url.cpp debe conservar una sola definicion de parseTarget y urlDecode")
-    for source in [
-        "src/cpp/server/http_types.hpp",
-    "src/cpp/server/http/response_writer.cpp",
-        "src/cpp/server/http/socket_io.cpp",
-        "src/cpp/server/http/url.cpp",
-        "src/cpp/tests/test_http_parser.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo HTTP: {source}")
+        fail("server/http/url.cpp debe conservar una sola definición de parseTarget y urlDecode")
 
-
-
-    text_sanitizer_lines = (ROOT / "src/cpp/server/text_sanitizer.cpp").read_text(encoding="utf-8").splitlines()
-    if len(text_sanitizer_lines) > 120:
-        fail(f"src/cpp/server/text_sanitizer.cpp volvió a crecer demasiado: {len(text_sanitizer_lines)} líneas")
-    for source in [
-        "src/cpp/server/sanitize_result.cpp",
-        "src/cpp/server/sanitize/content_filters.cpp",
-        "src/cpp/server/sanitize/risk_score.cpp",
-        "src/cpp/server/sanitize/utf8_text.cpp",
-        "src/cpp/tests/test_text_sanitizer.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo sanitizer: {source}")
     if '#include "types.hpp"' in (ROOT / "src/cpp/server/utils.hpp").read_text(encoding="utf-8"):
-        fail("utils.hpp no debe incluir server/types.hpp; usar json.hpp para evitar acoplar utilidades al core Piper")
-
-    markup_tts_lines = (ROOT / "src/cpp/server/markup_tts.cpp").read_text(encoding="utf-8").splitlines()
-    if len(markup_tts_lines) > 260:
-        fail(f"src/cpp/server/markup_tts.cpp volvió a concentrar parser/render: {len(markup_tts_lines)} líneas")
-    for source in [
-        "src/cpp/server/markup/markup_parser.cpp",
-        "src/cpp/server/markup/request_options.cpp",
-        "src/cpp/server/markup/audio_parts.cpp",
-        "src/cpp/tests/test_markup_parser.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo markup: {source}")
-
-
-    request_handler_lines = (ROOT / "src/cpp/server/request_handler.cpp").read_text(encoding="utf-8").splitlines()
-    if len(request_handler_lines) > 120:
-        fail(f"src/cpp/server/request_handler.cpp volvió a concentrar rutas HTTP: {len(request_handler_lines)} líneas")
-    for source in [
-        "src/cpp/server/routes/health_routes.cpp",
-        "src/cpp/server/routes/model_routes.cpp",
-        "src/cpp/server/routes/file_routes.cpp",
-        "src/cpp/server/model_cache.cpp",
-    "src/cpp/server/model_loader.cpp",
-    "src/cpp/server/model_runtime.cpp",
-    "src/cpp/server/model_metadata.cpp",
-    "src/cpp/server/model_paths.cpp",
-    "src/cpp/server/model_scanner.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo de rutas: {source}")
-
-
-
-    model_cache_lines = (ROOT / "src/cpp/server/model_cache.cpp").read_text(encoding="utf-8").splitlines()
-    if len(model_cache_lines) > 150:
-        fail(f"src/cpp/server/model_cache.cpp volvió a mezclar runtime/load/lease: {len(model_cache_lines)} líneas")
-    for source in [
-        "src/cpp/server/model_loader.cpp",
-        "src/cpp/server/model_runtime.cpp",
-    ]:
-        if source not in cmake:
-            fail(f"CMakeLists.txt no referencia módulo de cache/modelos: {source}")
-
-    piper_api = (ROOT / "src/cpp/piper/api.hpp").read_text(encoding="utf-8")
-    voice_loader = (ROOT / "src/cpp/core/voice_loader.cpp").read_text(encoding="utf-8")
-    if "const std::optional<SpeakerId> &speakerId" not in piper_api:
-        fail("loadVoice debe recibir speakerId como const reference para aceptar RunConfig inmutable")
-    if "const std::optional<SpeakerId> &speakerId" not in voice_loader:
-        fail("voice_loader.cpp debe mantener la firma const de speakerId")
+        fail("utils.hpp no debe incluir server/types.hpp")
 
     if (ROOT / "apps").exists():
         fail("apps/ no debe existir en el repo público del motor Piper Neo")
 
-    required_workflows = [
-        ".github/workflows/build.yml",
-        ".github/workflows/build-release.yml",
-    ]
-    for workflow in required_workflows:
+    for workflow in [".github/workflows/build.yml", ".github/workflows/build-release.yml"]:
         if not (ROOT / workflow).exists():
             fail(f"falta workflow requerido: {workflow}")
     if (ROOT / ".github/workflows/main.yml").exists():
@@ -352,7 +281,7 @@ def main() -> None:
     if "gh release create" in build_workflow or "gh release upload" in build_workflow:
         fail("build.yml no debe crear releases")
     if "workflow_dispatch:" not in release_workflow or "push:" in release_workflow:
-        fail("build-release.yml debe ser manual y no automatico")
+        fail("build-release.yml debe ser manual y no automático")
     if "gh release create" not in release_workflow or "gh release upload" not in release_workflow:
         fail("build-release.yml debe crear o actualizar GitHub Releases")
 

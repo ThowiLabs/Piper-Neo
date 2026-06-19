@@ -42,6 +42,9 @@ set(PIPER_APP_SOURCES
   src/cpp/app/env.cpp
   src/cpp/app/export_neo_mode.cpp
   src/cpp/app/hardware.cpp
+  src/cpp/app/hardware_probe.cpp
+  src/cpp/app/resource_limits.cpp
+  src/cpp/app/resource_policy.cpp
   src/cpp/app/piper_app.cpp
   src/cpp/app/platform.cpp
   src/cpp/app/raw_audio_output.cpp
@@ -120,6 +123,8 @@ set(PIPER_CORE_SOURCES
   src/cpp/core/sentence_splitter.cpp
   src/cpp/core/synthesis_pipeline.cpp
   src/cpp/core/synthesis_utils.cpp
+  src/cpp/core/text/chunk_rules.cpp
+  src/cpp/core/text/utf8_utils.cpp
   src/cpp/core/text_chunker.cpp
   src/cpp/core/voice_loader.cpp
   src/cpp/core/wav_stream_writer.cpp
@@ -144,6 +149,8 @@ if(PIPER_BUILD_TESTS)
     src/cpp/core/sentence_splitter.cpp
     src/cpp/core/synthesis_pipeline.cpp
     src/cpp/core/synthesis_utils.cpp
+    src/cpp/core/text/chunk_rules.cpp
+    src/cpp/core/text/utf8_utils.cpp
     src/cpp/core/text_chunker.cpp
     src/cpp/core/voice_loader.cpp
     src/cpp/core/wav_stream_writer.cpp
@@ -172,6 +179,18 @@ if(PIPER_BUILD_TESTS)
     src/cpp/tests/test_http_parser.cpp
     src/cpp/server/http/url.cpp
     src/cpp/server/utils.cpp
+  )
+
+  add_executable(test_text_chunker
+    src/cpp/tests/test_text_chunker.cpp
+    src/cpp/core/text/chunk_rules.cpp
+    src/cpp/core/text/utf8_utils.cpp
+    src/cpp/core/text_chunker.cpp
+  )
+
+  add_executable(test_resource_policy
+    src/cpp/tests/test_resource_policy.cpp
+    src/cpp/app/resource_limits.cpp
   )
 endif()
 
@@ -320,6 +339,8 @@ if(PIPER_BUILD_TESTS)
   target_compile_features(test_text_sanitizer PUBLIC cxx_std_17)
   target_compile_features(test_markup_parser PUBLIC cxx_std_17)
   target_compile_features(test_http_parser PUBLIC cxx_std_17)
+  target_compile_features(test_text_chunker PUBLIC cxx_std_17)
+  target_compile_features(test_resource_policy PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -347,6 +368,16 @@ if(PIPER_BUILD_TESTS)
 
   target_include_directories(
     test_http_parser PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_text_chunker PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_resource_policy PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
   )
 
@@ -383,6 +414,16 @@ if(PIPER_BUILD_TESTS)
   add_test(
     NAME test_http_parser
     COMMAND test_http_parser
+  )
+
+  add_test(
+    NAME test_text_chunker
+    COMMAND test_text_chunker
+  )
+
+  add_test(
+    NAME test_resource_policy
+    COMMAND test_resource_policy
   )
 endif()
 

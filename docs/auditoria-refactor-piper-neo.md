@@ -46,7 +46,7 @@ Solución implementada: la ayuda CLI vive en `help_text.*`, la validación cruza
 
 Solución implementada: `piper.hpp` queda como fachada compatible; los tipos públicos viven en `piper/types.hpp` y las funciones públicas en `piper/api.hpp`.
 
-### 11. `tts_scheduler.cpp` mezclaba cola, reportes y ensamblado WAV
+### 11. `tts_scheduler.cpp` mezclaba cola, reportes, chunks y ensamblado WAV
 
 Solución implementada: los reportes JSON viven en `server/metrics_report.*` y el ensamblado de chunks RAW a WAV vive en `server/jobs/chunked_wav.*`.
 
@@ -102,4 +102,9 @@ El repo está listo como base pública del motor Piper Neo. El refactor grande d
 - `src/cpp/server/model_scanner.cpp`: extrae escaneo de `.onnx`/`.neo`.
 - `src/cpp/server/model_paths.cpp`: centraliza `modelKey()` para eliminar duplicación con `model_cache.cpp`.
 
-Pendiente: pruebas funcionales para scanner/metadata/cache y refactor cuidadoso de `tts_scheduler.cpp`.
+Pendiente: pruebas funcionales más específicas para scanner/metadata/cache, scheduler bajo concurrencia y casos de audio real con varios modelos.
+
+
+## Smoke del binario final
+
+Se agregó `script/smoke-piper-binary.py` para probar un binario ya compilado con modelos reales: `--help`, `--version`, síntesis CLI, arranque de API, health/status/metrics, listado de modelos, validación negativa de TTS, generación TTS por API y descarga WAV.

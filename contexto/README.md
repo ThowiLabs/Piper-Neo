@@ -35,6 +35,11 @@ Leer en este orden:
 14. `14-correccion-build-loadvoice.md`
 15. `15-refactor-markup-tts.md`
 16. `16-refactor-rutas-http.md`
+17. `17-refactor-http-parser.md`
+18. `18-refactor-registro-modelos.md`
+19. `19-refactor-scheduler-jobs.md`
+20. `20-smoke-binario-final.md`
+21. `21-refactor-cache-modelos.md`
 
 # Librerías usadas
 
@@ -62,13 +67,8 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/`, los argumentos separan parser/ayuda/validación, `piper.hpp` es fachada pública, el scheduler delega métricas JSON/WAV chunked a módulos propios el sanitizer API vive separado en `server/sanitize/`, `loadVoice()` recibe `speakerId` como referencia const para no romper `RunConfig` inmutable y markup TTS vive dividido en `server/markup/` y las rutas HTTP viven separadas en `server/routes/`.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/`, los argumentos separan parser/ayuda/validación, `piper.hpp` es fachada pública, el scheduler delega métricas JSON/WAV/chunks/estado a módulos `server/jobs/`, el sanitizer API vive separado en `server/sanitize/`, `loadVoice()` recibe `speakerId` como referencia const, markup TTS vive dividido en `server/markup/`, las rutas HTTP viven separadas en `server/routes/`, HTTP base vive en `server/http/` y cache de modelos se separa en runtime/loader.
 
 # Próximos pasos
 
-Probar el build real de Windows después del refactor de rutas HTTP y ampliar pruebas funcionales de CLI, HTTP, sanitizer, markup y `.neo` con compresión zstd cuando esté disponible.
-- `16-refactor-rutas-http.md`: separación de rutas HTTP del servidor en módulos dedicados.
-
-- `17-refactor-http-parser.md`: separación de parser HTTP, socket I/O, respuestas y helpers URL.
-
-- `18-refactor-registro-modelos.md`: separación de metadata, scanner y claves canónicas del registro de modelos.
+Probar el build real de Windows y ejecutar `script/smoke-piper-binary.py --models <ruta>` para validar CLI, API, TTS y descarga WAV con modelos reales.

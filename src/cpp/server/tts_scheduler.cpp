@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <stdexcept>
 #include <string>
 
 #include <spdlog/spdlog.h>
 
 #include "utils.hpp"
-#include "server/jobs/chunked_wav.hpp"
+#include "server/jobs/chunk_worker.hpp"
+#include "server/jobs/job_lifecycle.hpp"
 
 namespace piper_server {
 
@@ -45,25 +45,7 @@ TtsJobResult FairTtsScheduler::synthesize(const TtsJobRequest &request) {
   }
 
   const auto jobStart = std::chrono::steady_clock::now();
-  auto job = std::make_shared<JobState>();
-  job->id = makeOutputFileName();
-  if (job->id.size() > 4 && job->id.substr(job->id.size() - 4) == ".wav") {
-    job->id.erase(job->id.size() - 4);
-  }
-  job->textChunks = piper::splitTextIntoChunks(request.text, options.maxTextChunkBytes);
-  job->fileName = request.fileName;
-  job->outputPath = request.outputPath;
-  job->requestedModel = request.requestedModel;
-  job->speakerId = request.speakerId;
-  job->noiseScale = request.noiseScale;
-  job->lengthScale = request.lengthScale;
-  job->noiseW = request.noiseW;
-  job->sentenceSilenceSeconds = request.sentenceSilenceSeconds;
-  job->shouldCancel = request.shouldCancel;
-  job->pendingChunks = job->textChunks.size();
-  job->chunkPaths.resize(job->textChunks.size());
-  job->chunkBytes.resize(job->textChunks.size(), 0);
-  job->tempDir = options.outputDir / "tmp" / job->id;
+  auto job = createJobState(request, options);
 
   if (job->textChunks.empty()) {
     throw std::runtime_error("missing_fields");
@@ -139,18 +121,18 @@ TtsJobResult FairTtsScheduler::synthesize(const TtsJobRequest &request) {
   queueCv.notify_all();
 
   if (job->cancelled && !job->failed) {
-    cleanupJob(*job);
+    cleanupJobTemp(*job, metrics);
     metrics.cancelledJobs++;
     throw std::runtime_error("synthesis_cancelled");
   }
 
   if (job->failed) {
-    cleanupJob(*job);
+    cleanupJobTemp(*job, metrics);
     metrics.failedJobs++;
     throw std::runtime_error(job->error.empty() ? "synthesis_error" : job->error);
   }
 
-  assembleWav(*job);
+  assembleJobWav(*job);
   const auto jobEnd = std::chrono::steady_clock::now();
   const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(jobEnd - jobStart).count();
   spdlog::info("{} TTS job finished: id={} model={} chunks={} audio_seconds={} infer_seconds={} duration_ms={} file={} bytes={}",
@@ -158,20 +140,10 @@ TtsJobResult FairTtsScheduler::synthesize(const TtsJobRequest &request) {
                job->synthesis.audioSeconds, job->synthesis.inferSeconds,
                elapsedMs, job->fileName,
                std::filesystem::exists(job->outputPath) ? std::filesystem::file_size(job->outputPath) : 0);
-  cleanupJob(*job);
+  cleanupJobTemp(*job, metrics);
   metrics.completedJobs++;
 
-  TtsJobResult result;
-  result.fileName = job->fileName;
-  result.outputPath = job->outputPath;
-  result.modelName = job->modelName;
-  result.modelPath = job->modelPath;
-  result.chunks = job->textChunks.size();
-  result.synthesis = job->synthesis;
-  if (std::filesystem::exists(job->outputPath)) {
-    result.bytes = std::filesystem::file_size(job->outputPath);
-  }
-  return result;
+  return makeJobResult(*job);
 }
 
 std::size_t FairTtsScheduler::activeJobCount() const {
@@ -205,7 +177,7 @@ void FairTtsScheduler::activatePendingJobsLocked() {
   }
 }
 
-std::optional<FairTtsScheduler::WorkItem> FairTtsScheduler::nextWork() {
+std::optional<TtsWorkItem> FairTtsScheduler::nextWork() {
   std::unique_lock<std::mutex> lock(queueMutex);
   queueCv.wait(lock, [this]() { return stopping || !activeRoundRobin.empty(); });
   if (stopping) {
@@ -229,7 +201,7 @@ std::optional<FairTtsScheduler::WorkItem> FairTtsScheduler::nextWork() {
       if (job->nextChunk < job->textChunks.size()) {
         activeRoundRobin.push_back(job);
       }
-      return WorkItem{job, index};
+      return TtsWorkItem{job, index};
     }
   }
 
@@ -247,182 +219,9 @@ void FairTtsScheduler::workerLoop() {
     }
 
     metrics.processingChunks++;
-    processChunk(maybeWork->job, maybeWork->index);
+    synthesizeJobChunk(piperConfig, modelCache, options, metrics, maybeWork->job, maybeWork->index);
     metrics.processingChunks--;
   }
-}
-
-void FairTtsScheduler::processChunk(const std::shared_ptr<JobState> &job, std::size_t index) {
-  try {
-    {
-      std::lock_guard<std::mutex> lock(job->mutex);
-      if (job->cancelled || job->failed) {
-        if (job->pendingChunks > job->inFlightChunks) {
-          job->pendingChunks = job->inFlightChunks;
-        }
-        markChunkFinished(*job);
-        return;
-      }
-    }
-
-    auto shouldCancel = [job]() {
-      std::lock_guard<std::mutex> lock(job->mutex);
-      if (job->cancelled || job->failed) {
-        return true;
-      }
-      return job->shouldCancel ? job->shouldCancel() : false;
-    };
-
-    if (shouldCancel()) {
-      throw std::runtime_error("synthesis_cancelled");
-    }
-
-    VoiceLease voiceLease = modelCache.checkout(job->requestedModel);
-    if (shouldCancel()) {
-      throw std::runtime_error("synthesis_cancelled");
-    }
-
-    auto &selectedVoice = voiceLease.get();
-    const auto previousSpeakerId = selectedVoice.synthesisConfig.speakerId;
-    const auto previousNoiseScale = selectedVoice.synthesisConfig.noiseScale;
-    const auto previousLengthScale = selectedVoice.synthesisConfig.lengthScale;
-    const auto previousNoiseW = selectedVoice.synthesisConfig.noiseW;
-    const auto previousSentenceSilence = selectedVoice.synthesisConfig.sentenceSilenceSeconds;
-    auto restoreSynthesisConfig = [&]() {
-      selectedVoice.synthesisConfig.speakerId = previousSpeakerId;
-      selectedVoice.synthesisConfig.noiseScale = previousNoiseScale;
-      selectedVoice.synthesisConfig.lengthScale = previousLengthScale;
-      selectedVoice.synthesisConfig.noiseW = previousNoiseW;
-      selectedVoice.synthesisConfig.sentenceSilenceSeconds = previousSentenceSilence;
-    };
-
-    if (job->speakerId) {
-      selectedVoice.synthesisConfig.speakerId = *job->speakerId;
-    }
-    if (job->noiseScale) {
-      selectedVoice.synthesisConfig.noiseScale = *job->noiseScale;
-    }
-    if (job->lengthScale) {
-      selectedVoice.synthesisConfig.lengthScale = *job->lengthScale;
-    }
-    if (job->noiseW) {
-      selectedVoice.synthesisConfig.noiseW = *job->noiseW;
-    }
-    if (job->sentenceSilenceSeconds) {
-      selectedVoice.synthesisConfig.sentenceSilenceSeconds = *job->sentenceSilenceSeconds;
-    }
-
-    const auto chunkPath = job->tempDir / ("chunk_" + std::to_string(index) + ".raw");
-    if (shouldCancel()) {
-      restoreSynthesisConfig();
-      throw std::runtime_error("synthesis_cancelled");
-    }
-
-    std::ofstream chunkFile(chunkPath, std::ios::binary);
-    if (!chunkFile.good()) {
-      restoreSynthesisConfig();
-      throw std::runtime_error("Could not open chunk temp file");
-    }
-
-    piper::SynthesisResult chunkResult;
-    std::vector<int16_t> audioBuffer;
-    std::uintmax_t bytes = 0;
-    auto audioCallback = [&]() {
-      if (audioBuffer.empty()) {
-        return;
-      }
-      const std::size_t audioBytes = sizeof(int16_t) * audioBuffer.size();
-      chunkFile.write(reinterpret_cast<const char *>(audioBuffer.data()), audioBytes);
-      bytes += audioBytes;
-
-      const auto newTempTotal = metrics.tempStorageBytes.fetch_add(audioBytes) + audioBytes;
-      job->allocatedTempBytes.fetch_add(audioBytes);
-      if (options.maxTempBytes > 0 && newTempTotal > options.maxTempBytes) {
-        throw std::runtime_error("temp_storage_full");
-      }
-    };
-
-    try {
-      piper::textToAudio(piperConfig, selectedVoice, job->textChunks[index], audioBuffer,
-                         chunkResult, audioCallback, shouldCancel);
-    } catch (...) {
-      restoreSynthesisConfig();
-      throw;
-    }
-    restoreSynthesisConfig();
-    chunkFile.close();
-
-    {
-      std::lock_guard<std::mutex> lock(job->mutex);
-      job->chunkPaths[index] = chunkPath;
-      job->chunkBytes[index] = bytes;
-      job->sampleRate = selectedVoice.synthesisConfig.sampleRate;
-      job->sampleWidth = selectedVoice.synthesisConfig.sampleWidth;
-      job->channels = selectedVoice.synthesisConfig.channels;
-      job->modelName = voiceLease.model().name;
-      job->modelPath = voiceLease.model().modelPath;
-      job->synthesis.audioSeconds += chunkResult.audioSeconds;
-      job->synthesis.inferSeconds += chunkResult.inferSeconds;
-      if (job->synthesis.audioSeconds > 0) {
-        job->synthesis.realTimeFactor = job->synthesis.inferSeconds / job->synthesis.audioSeconds;
-      }
-      metrics.completedChunks++;
-      markChunkFinished(*job);
-    }
-  } catch (const std::exception &e) {
-    std::lock_guard<std::mutex> lock(job->mutex);
-    const std::string message = e.what();
-    if (message == "synthesis_cancelled") {
-      job->cancelled = true;
-    } else {
-      job->failed = true;
-      job->error = message;
-      metrics.failedChunks++;
-    }
-    if (job->pendingChunks > job->inFlightChunks) {
-      job->pendingChunks = job->inFlightChunks;
-    }
-    markChunkFinished(*job);
-  }
-}
-
-void FairTtsScheduler::markChunkFinished(JobState &job) {
-  if (job.inFlightChunks > 0) {
-    --job.inFlightChunks;
-  }
-  if (job.pendingChunks > 0) {
-    --job.pendingChunks;
-  }
-  if (job.pendingChunks == 0 && job.inFlightChunks == 0) {
-    job.done = true;
-    job.cv.notify_all();
-  }
-}
-
-void FairTtsScheduler::assembleWav(const JobState &job) {
-  ChunkedWavOutput output;
-  output.outputPath = job.outputPath;
-  output.chunkPaths = job.chunkPaths;
-  output.chunkBytes = job.chunkBytes;
-  output.sampleRate = job.sampleRate;
-  output.sampleWidth = job.sampleWidth;
-  output.channels = job.channels;
-  assembleChunkedWav(output);
-}
-
-void FairTtsScheduler::cleanupJob(JobState &job) {
-  const auto allocated = job.allocatedTempBytes.exchange(0);
-  if (allocated > 0) {
-    const auto current = metrics.tempStorageBytes.load();
-    if (current >= allocated) {
-      metrics.tempStorageBytes.fetch_sub(allocated);
-    } else {
-      metrics.tempStorageBytes.store(0);
-    }
-  }
-
-  std::error_code ignored;
-  std::filesystem::remove_all(job.tempDir, ignored);
 }
 
 } // namespace piper_server

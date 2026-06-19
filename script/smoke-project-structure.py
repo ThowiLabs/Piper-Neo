@@ -40,7 +40,12 @@ REQUIRED_FILES = [
     "src/cpp/app/synthesis_mode.hpp",
     "src/cpp/app/voice_runtime.cpp",
     "src/cpp/server/metrics_report.cpp",
+    "src/cpp/server/jobs/chunk_worker.hpp",
+    "src/cpp/server/jobs/chunk_worker.cpp",
     "src/cpp/server/jobs/chunked_wav.cpp",
+    "src/cpp/server/jobs/job_lifecycle.hpp",
+    "src/cpp/server/jobs/job_lifecycle.cpp",
+    "src/cpp/server/jobs/job_state.hpp",
     "src/cpp/tests/test_neo_package.cpp",
     "src/cpp/app/voice_runtime.hpp",
     "src/cpp/app/cli_validation.cpp",
@@ -74,6 +79,8 @@ REQUIRED_FILES = [
     "src/cpp/server/routes/file_routes.cpp",
     "src/cpp/server/routes/tts_routes.hpp",
     "src/cpp/server/model_cache.cpp",
+    "src/cpp/server/model_loader.cpp",
+    "src/cpp/server/model_runtime.cpp",
     "src/cpp/server/model_metadata.cpp",
     "src/cpp/server/model_paths.cpp",
     "src/cpp/server/model_scanner.cpp",
@@ -82,6 +89,7 @@ REQUIRED_FILES = [
     "src/cpp/server/http/socket_io.cpp",
     "src/cpp/server/http/url.cpp",
     "src/cpp/tests/test_http_parser.cpp",
+    "script/smoke-piper-binary.py",
 ]
 
 REQUIRED_CMAKE_SOURCES = [
@@ -107,7 +115,9 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/app/synthesis_mode.cpp",
     "src/cpp/app/voice_runtime.cpp",
     "src/cpp/server/metrics_report.cpp",
+    "src/cpp/server/jobs/chunk_worker.cpp",
     "src/cpp/server/jobs/chunked_wav.cpp",
+    "src/cpp/server/jobs/job_lifecycle.cpp",
     "src/cpp/tests/test_neo_package.cpp",
     "src/cpp/server/sanitize_result.cpp",
     "src/cpp/server/sanitize/content_filters.cpp",
@@ -122,6 +132,8 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/server/routes/model_routes.cpp",
     "src/cpp/server/routes/file_routes.cpp",
     "src/cpp/server/model_cache.cpp",
+    "src/cpp/server/model_loader.cpp",
+    "src/cpp/server/model_runtime.cpp",
     "src/cpp/server/model_metadata.cpp",
     "src/cpp/server/model_paths.cpp",
     "src/cpp/server/model_scanner.cpp",
@@ -152,6 +164,9 @@ EXPECTED_CONTEXT = {
     "16-refactor-rutas-http.md",
     "17-refactor-http-parser.md",
     "18-refactor-registro-modelos.md",
+    "19-refactor-scheduler-jobs.md",
+    "20-smoke-binario-final.md",
+    "21-refactor-cache-modelos.md",
 }
 
 
@@ -216,6 +231,17 @@ def main() -> None:
 
 
     tts_scheduler_cpp = (ROOT / "src/cpp/server/tts_scheduler.cpp").read_text(encoding="utf-8")
+    if len(tts_scheduler_cpp.splitlines()) > 260:
+        fail(f"src/cpp/server/tts_scheduler.cpp volvió a concentrar demasiada lógica: {len(tts_scheduler_cpp.splitlines())} líneas")
+    for source in [
+        "src/cpp/server/jobs/chunk_worker.cpp",
+        "src/cpp/server/jobs/job_lifecycle.cpp",
+        "script/smoke-piper-binary.py",
+    ]:
+        if source not in cmake and not source.startswith("script/"):
+            fail(f"CMakeLists.txt no referencia módulo scheduler: {source}")
+        if source.startswith("script/") and not (ROOT / source).exists():
+            fail(f"falta smoke script: {source}")
     if "json resourcePolicyJson" in tts_scheduler_cpp or "json metricsJson" in tts_scheduler_cpp:
         fail("tts_scheduler.cpp no debe contener reportes JSON de métricas")
     if "std::array<char, 64 * 1024>" in tts_scheduler_cpp:
@@ -278,6 +304,8 @@ def main() -> None:
         "src/cpp/server/routes/model_routes.cpp",
         "src/cpp/server/routes/file_routes.cpp",
         "src/cpp/server/model_cache.cpp",
+    "src/cpp/server/model_loader.cpp",
+    "src/cpp/server/model_runtime.cpp",
     "src/cpp/server/model_metadata.cpp",
     "src/cpp/server/model_paths.cpp",
     "src/cpp/server/model_scanner.cpp",
@@ -285,6 +313,17 @@ def main() -> None:
         if source not in cmake:
             fail(f"CMakeLists.txt no referencia módulo de rutas: {source}")
 
+
+
+    model_cache_lines = (ROOT / "src/cpp/server/model_cache.cpp").read_text(encoding="utf-8").splitlines()
+    if len(model_cache_lines) > 150:
+        fail(f"src/cpp/server/model_cache.cpp volvió a mezclar runtime/load/lease: {len(model_cache_lines)} líneas")
+    for source in [
+        "src/cpp/server/model_loader.cpp",
+        "src/cpp/server/model_runtime.cpp",
+    ]:
+        if source not in cmake:
+            fail(f"CMakeLists.txt no referencia módulo de cache/modelos: {source}")
 
     piper_api = (ROOT / "src/cpp/piper/api.hpp").read_text(encoding="utf-8")
     voice_loader = (ROOT / "src/cpp/core/voice_loader.cpp").read_text(encoding="utf-8")

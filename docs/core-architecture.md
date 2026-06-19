@@ -113,10 +113,18 @@ sanitize_result.*       Resultado y warnings únicos de sanitización.
 sanitize/utf8_text.*    UTF-8 estricto, Unicode, emojis, whitespace y recorte.
 sanitize/content_filters.* HTML, BBCode, markdown, código, alta entropía, URLs y correos.
 sanitize/risk_score.*   Cálculo de riesgo por warnings de sanitización.
-model_registry.*        Escaneo, listado y metadatos de modelos.
-model_cache.*           Réplicas de modelos y leases de voces.
-tts_scheduler.*         Cola justa, concurrencia y workers de síntesis.
+model_registry.*        Cache temporal, refresh y búsqueda de modelos.
+model_metadata.*        Metadata JSON, modelcard, imágenes y campos técnicos.
+model_scanner.*         Escaneo de .onnx/.neo y selección de primer modelo usable.
+model_paths.*           Claves canónicas de modelo compartidas por registry/cache.
+model_cache.*           Orquestador de cache de modelos y checkout de leases.
+model_runtime.*         Slots, runtime y VoiceLease con RAII para liberar voces.
+model_loader.*          Carga real de .onnx/.neo y creación de piper::Voice.
+tts_scheduler.*         Cola justa y coordinación de workers de síntesis.
 metrics_report.*        Reportes JSON de política de recursos y métricas.
+jobs/job_state.*        Estado compartido de jobs y work items.
+jobs/job_lifecycle.*    Creación, cierre, limpieza y resultado de jobs.
+jobs/chunk_worker.*     Síntesis de chunks con overrides temporales de voz.
 jobs/chunked_wav.*      Ensamblado de WAV desde chunks RAW temporales.
 markup_tts.*            Orquestador de síntesis markup TTS multi-segmento.
 markup/markup_parser.*  Parser de `<model>`/`<silence>`, atributos, speakers y silencios.
@@ -214,7 +222,7 @@ ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text
 - Compilar con el script real de Windows.
 - Probar síntesis real con `.onnx` y `.neo`.
 - Probar `--output_raw`, WAV normal y stdin largo.
-- Agregar smoke tests HTTP para `/api/health`, `/api/v1/models`, `/api/v1/tts` y archivos.
+- Ampliar `script/smoke-piper-binary.py` con más casos cuando se agreguen endpoints o flags nuevos.
 - Ampliar pruebas funcionales de `.neo` para cubrir export zstd real cuando zstd esté disponible.
 - Agregar pruebas HTTP unitarias para `routes/*` usando un writer/socket simulado.
 - Evaluar CMake moderno por targets si se decide tocar el sistema de build con más calma.

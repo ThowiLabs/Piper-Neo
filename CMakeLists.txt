@@ -66,16 +66,20 @@ set(PIPER_SERVER_SOURCES
   src/cpp/server/http/response_writer.cpp
   src/cpp/server/http/socket_io.cpp
   src/cpp/server/http/url.cpp
+  src/cpp/server/jobs/chunk_worker.cpp
   src/cpp/server/jobs/chunked_wav.cpp
+  src/cpp/server/jobs/job_lifecycle.cpp
   src/cpp/server/markup/audio_parts.cpp
   src/cpp/server/markup/markup_parser.cpp
   src/cpp/server/markup/request_options.cpp
   src/cpp/server/markup_tts.cpp
   src/cpp/server/metrics_report.cpp
   src/cpp/server/model_cache.cpp
+  src/cpp/server/model_loader.cpp
   src/cpp/server/model_metadata.cpp
   src/cpp/server/model_paths.cpp
   src/cpp/server/model_registry.cpp
+  src/cpp/server/model_runtime.cpp
   src/cpp/server/model_scanner.cpp
   src/cpp/server/output_cleanup.cpp
   src/cpp/server/request_handler.cpp

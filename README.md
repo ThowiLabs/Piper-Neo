@@ -255,7 +255,11 @@ cmake -S . -B /tmp/piper-neo-cmake-check-tests -DPIPER_BUILD_TESTS=ON
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_neo_package
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_text_sanitizer
 cmake --build /tmp/piper-neo-cmake-check-tests --target test_markup_parser
-ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser" --output-on-failure
+ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text_sanitizer|test_markup_parser|test_http_parser" --output-on-failure
+# After building the final binary, test CLI + API with real models:
+python script/smoke-piper-binary.py --models models
+# You can also pass the binary explicitly:
+python script/smoke-piper-binary.py --binary dist-winlibs/piper-neo-windows/piper.exe --models models
 ```
 
 ## Internal C++ architecture
@@ -267,7 +271,7 @@ The C++ core is split by responsibility:
 - `src/cpp/piper.hpp` and `src/cpp/piper/`: compatible public facade, public types and engine API.
 - `src/cpp/core/`: Piper runtime, voice loading, ONNX inference, chunking, synthesis pipeline and WAV streaming.
 - `src/cpp/server.cpp`: local HTTP server runtime, sockets and accept loop.
-- `src/cpp/server/`: HTTP, auth, route dispatch, text sanitization, models, cache, TTS scheduler, metrics, markup TTS, WAV, jobs and cleanup modules.
+- `src/cpp/server/`: HTTP, auth, route dispatch, text sanitization, models, cache/runtime/loader, TTS scheduler, metrics, markup TTS, WAV, jobs and cleanup modules.
 - `src/cpp/server/routes/`: HTTP API routes split by responsibility: health/status/metrics, models/images, generated files and TTS synthesis.
 - `src/cpp/server/sanitize/`: API text sanitizer internals for UTF-8/Unicode, content filters and risk scoring.
 - `src/cpp/text_normalizer.cpp` and `src/cpp/text/`: configurable model text normalization.

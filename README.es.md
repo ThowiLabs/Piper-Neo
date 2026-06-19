@@ -303,3 +303,11 @@ Piper Neo deriva de [rhasspy/piper](https://github.com/rhasspy/piper). Respeta l
 ### HTTP modular y catálogo de modelos
 
 El servidor de Piper Neo separa rutas, parser HTTP, socket I/O, respuestas, sanitizer, markup TTS y catálogo/cache de modelos en módulos internos pequeños. Esto permite mantener la API TTS sin convertir `server.cpp` o `request_handler.cpp` en archivos monolíticos.
+
+### Limpieza interna reciente
+
+El modo de síntesis CLI ahora separa entrada directa, overrides JSON por línea,
+escritura de salida y rutas por timestamp en módulos pequeños
+`src/cpp/app/synthesis_*`. La normalización builtin controlada por modelo también
+se dividió en matchers, renderers y segmentos protegidos, con cobertura en
+`test_text_builtins`.

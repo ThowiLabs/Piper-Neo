@@ -18,7 +18,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 SOURCES = [
+    ROOT / "src/cpp/text/builtin_matchers.cpp",
     ROOT / "src/cpp/text/builtin_normalizer.cpp",
+    ROOT / "src/cpp/text/builtin_renderers.cpp",
+    ROOT / "src/cpp/text/protected_segments.cpp",
     ROOT / "src/cpp/text/replacements.cpp",
     ROOT / "src/cpp/text/spanish_numbers.cpp",
     ROOT / "src/cpp/text/string_utils.cpp",

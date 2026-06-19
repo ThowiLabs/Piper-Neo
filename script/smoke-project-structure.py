@@ -65,8 +65,16 @@ REQUIRED_FILES = [
     "src/cpp/app/resource_policy.cpp",
     "src/cpp/app/server_mode.cpp",
     "src/cpp/app/server_mode.hpp",
+    "src/cpp/app/synthesis_input.cpp",
+    "src/cpp/app/synthesis_input.hpp",
+    "src/cpp/app/synthesis_json.cpp",
+    "src/cpp/app/synthesis_json.hpp",
     "src/cpp/app/synthesis_mode.cpp",
     "src/cpp/app/synthesis_mode.hpp",
+    "src/cpp/app/synthesis_output.cpp",
+    "src/cpp/app/synthesis_output.hpp",
+    "src/cpp/app/synthesis_paths.cpp",
+    "src/cpp/app/synthesis_paths.hpp",
     "src/cpp/app/voice_runtime.cpp",
     "src/cpp/app/voice_runtime.hpp",
     "src/cpp/server/metrics_report.hpp",
@@ -128,6 +136,13 @@ REQUIRED_FILES = [
     "src/cpp/tests/test_tts_request.cpp",
     "src/cpp/tests/test_sentence_splitter.cpp",
     "src/cpp/tests/test_model_registry.cpp",
+    "src/cpp/tests/test_text_builtins.cpp",
+    "src/cpp/text/builtin_matchers.cpp",
+    "src/cpp/text/builtin_matchers.hpp",
+    "src/cpp/text/builtin_renderers.cpp",
+    "src/cpp/text/builtin_renderers.hpp",
+    "src/cpp/text/protected_segments.cpp",
+    "src/cpp/text/protected_segments.hpp",
     "script/smoke-piper-binary.py",
 ]
 
@@ -162,7 +177,11 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/app/resource_policy.cpp",
     "src/cpp/app/export_neo_mode.cpp",
     "src/cpp/app/server_mode.cpp",
+    "src/cpp/app/synthesis_input.cpp",
+    "src/cpp/app/synthesis_json.cpp",
     "src/cpp/app/synthesis_mode.cpp",
+    "src/cpp/app/synthesis_output.cpp",
+    "src/cpp/app/synthesis_paths.cpp",
     "src/cpp/app/voice_runtime.cpp",
     "src/cpp/server/metrics_report.cpp",
     "src/cpp/server/jobs/chunk_worker.cpp",
@@ -201,7 +220,11 @@ REQUIRED_CMAKE_SOURCES = [
     "src/cpp/tests/test_resource_policy.cpp",
     "src/cpp/tests/test_tts_request.cpp",
     "src/cpp/tests/test_sentence_splitter.cpp",
-    "src/cpp/tests/test_model_registry.cpp",]
+    "src/cpp/tests/test_model_registry.cpp",
+    "src/cpp/tests/test_text_builtins.cpp",
+    "src/cpp/text/builtin_matchers.cpp",
+    "src/cpp/text/builtin_renderers.cpp",
+    "src/cpp/text/protected_segments.cpp",]
 
 EXPECTED_CONTEXT = {
     "README.md",
@@ -234,6 +257,7 @@ EXPECTED_CONTEXT = {
     "27-refactor-tts-route-request.md",
     "28-correccion-build-data-image-route.md",
     "29-refactor-sentence-splitter-model-tests.md",
+    "30-refactor-synthesis-mode-text-builtins.md",
 }
 
 
@@ -264,6 +288,8 @@ def main() -> None:
         "src/cpp/neo_model.cpp": 140,
         "src/cpp/app/cli_args.cpp": 280,
         "src/cpp/app/hardware.cpp": 80,
+        "src/cpp/app/synthesis_mode.cpp": 130,
+        "src/cpp/text/builtin_normalizer.cpp": 180,
         "src/cpp/core/text_chunker.cpp": 80,
         "src/cpp/core/sentence_splitter.cpp": 80,
         "src/cpp/core/wav_stream_writer.cpp": 120,

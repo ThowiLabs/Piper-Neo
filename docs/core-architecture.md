@@ -309,3 +309,28 @@ src/cpp/server/routes/tts_routes.*   Dispatch, sanitizer, scheduler, markup y li
 ```
 
 Esto reduce el acoplamiento de la ruta y permite agregar pruebas unitarias de request sin levantar sockets.
+
+## CLI synthesis mode helpers
+
+The CLI synthesis mode is intentionally kept as a small orchestration layer. The
+helper modules under `src/cpp/app/` split input handling, JSON-line overrides,
+output writing and timestamped paths:
+
+- `synthesis_input.*`: direct input from `--text`, `--input_file` or stdin.
+- `synthesis_json.*`: per-line JSON overrides such as `output_file`, `speaker_id`
+  and named `speaker`.
+- `synthesis_output.*`: WAV/stdout/raw output handling and synthesis result logs.
+- `synthesis_paths.*`: timestamped output paths for directory mode.
+
+## Builtin text normalization modules
+
+Builtin text normalization is split to keep model-controlled speech rules easy to
+test:
+
+- `text/builtin_matchers.*`: regex patterns and safe token boundaries.
+- `text/builtin_renderers.*`: spoken forms for URLs, emails, versions, currency
+  and percentages.
+- `text/protected_segments.*`: temporary markers that protect builtin output
+  before custom replacements are applied.
+- `tests/test_text_builtins.cpp`: fast unit coverage without ONNX, eSpeak or
+  piper-phonemize.

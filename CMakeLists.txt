@@ -49,7 +49,11 @@ set(PIPER_APP_SOURCES
   src/cpp/app/platform.cpp
   src/cpp/app/raw_audio_output.cpp
   src/cpp/app/server_mode.cpp
+  src/cpp/app/synthesis_input.cpp
+  src/cpp/app/synthesis_json.cpp
   src/cpp/app/synthesis_mode.cpp
+  src/cpp/app/synthesis_output.cpp
+  src/cpp/app/synthesis_paths.cpp
   src/cpp/app/voice_runtime.cpp
 )
 
@@ -113,7 +117,10 @@ set(PIPER_NEO_SOURCES
 )
 
 set(PIPER_TEXT_SOURCES
+  src/cpp/text/builtin_matchers.cpp
   src/cpp/text/builtin_normalizer.cpp
+  src/cpp/text/builtin_renderers.cpp
+  src/cpp/text/protected_segments.cpp
   src/cpp/text/replacements.cpp
   src/cpp/text/spanish_numbers.cpp
   src/cpp/text/string_utils.cpp
@@ -221,6 +228,11 @@ if(PIPER_BUILD_TESTS)
     src/cpp/tests/test_sentence_splitter.cpp
     src/cpp/core/sentence/boundary_detector.cpp
     src/cpp/core/sentence_splitter.cpp
+  )
+
+  add_executable(test_text_builtins
+    src/cpp/tests/test_text_builtins.cpp
+    ${PIPER_TEXT_SOURCES}
   )
 
   add_executable(test_model_registry
@@ -383,6 +395,7 @@ if(PIPER_BUILD_TESTS)
   target_compile_features(test_tts_request PUBLIC cxx_std_17)
   target_compile_features(test_sentence_splitter PUBLIC cxx_std_17)
   target_compile_features(test_model_registry PUBLIC cxx_std_17)
+  target_compile_features(test_text_builtins PUBLIC cxx_std_17)
 
   target_include_directories(
     test_piper PUBLIC
@@ -435,6 +448,11 @@ if(PIPER_BUILD_TESTS)
 
   target_include_directories(
     test_model_registry PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
+  )
+
+  target_include_directories(
+    test_text_builtins PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
   )
 
@@ -496,6 +514,11 @@ if(PIPER_BUILD_TESTS)
   add_test(
     NAME test_model_registry
     COMMAND test_model_registry "${CMAKE_CURRENT_BINARY_DIR}/test-model-registry"
+  )
+
+  add_test(
+    NAME test_text_builtins
+    COMMAND test_text_builtins
   )
 endif()
 

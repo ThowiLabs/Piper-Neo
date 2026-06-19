@@ -150,3 +150,14 @@ Implementado: `test_tts_request.cpp` valida errores de request sin depender del 
 - `src/cpp/core/sentence/boundary_detector.*`: concentra reglas de límites de oración, abreviaturas, decimales, comillas, puntos suspensivos, saltos de línea y UTF-8.
 - `src/cpp/tests/test_sentence_splitter.cpp`: valida reglas de segmentación sin cargar modelos.
 - `src/cpp/tests/test_model_registry.cpp`: valida scanner, metadata JSON, resolución por nombre/stem, fallback a modelo activo y rechazo de nombres inseguros usando archivos fake.
+
+## Avance: síntesis CLI y builtins de normalización
+
+- `src/cpp/app/synthesis_mode.cpp` dejó de concentrar entrada, JSON por línea,
+  salida WAV/stdout/raw y rutas temporales.
+- Se agregaron módulos `synthesis_input`, `synthesis_json`, `synthesis_output` y
+  `synthesis_paths` para mantener el modo CLI más auditable.
+- `src/cpp/text/builtin_normalizer.cpp` ahora delega regex/límites seguros,
+  renderizado hablado y segmentos protegidos.
+- `test_text_builtins` valida números, versiones, correos, URLs, moneda,
+  porcentajes, puntuación final y límites seguros de decimales.

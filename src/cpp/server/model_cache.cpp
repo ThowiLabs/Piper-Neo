@@ -38,29 +38,28 @@ VoiceLease ModelCache::checkout(const std::optional<std::string> &requestedModel
   auto runtime = runtimeFor(info);
 
   std::unique_lock<std::mutex> lock(runtime->mutex);
-  for (const auto &slot : runtime->slots) {
-    if (!slot->inUse) {
-      slot->inUse = true;
-      return VoiceLease(runtime, slot.get());
-    }
-  }
-
-  while ((runtime->slots.size() + runtime->loadingSlots) >= maxReplicas) {
-    runtime->cv.wait(lock, [&runtime]() {
-      for (const auto &slot : runtime->slots) {
-        if (!slot->inUse) {
-          return true;
-        }
-      }
-      return false;
-    });
-
+  while (true) {
     for (const auto &slot : runtime->slots) {
       if (!slot->inUse) {
         slot->inUse = true;
         return VoiceLease(runtime, slot.get());
       }
     }
+
+    // Avoid a startup stampede: when several chunks request the same uncached
+    // model, let only one thread load a replica. eSpeak/phonemize and Windows
+    // file reads are process-global enough that concurrent initial loads can
+    // trigger corrupted dictionary reads such as "es_dict length=0".
+    if (runtime->loadingSlots > 0) {
+      runtime->cv.wait(lock);
+      continue;
+    }
+
+    if (runtime->slots.size() < maxReplicas) {
+      break;
+    }
+
+    runtime->cv.wait(lock);
   }
 
   ++runtime->loadingSlots;

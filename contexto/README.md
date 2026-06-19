@@ -42,6 +42,7 @@ Leer en este orden:
 21. `21-refactor-cache-modelos.md`
 22. `22-refactor-text-chunker.md`
 23. `23-refactor-hardware-policy.md`
+24. `24-correccion-concurrencia-espeak.md`
 
 # Librerías usadas
 
@@ -69,7 +70,7 @@ Se reinició `contexto/` como documentación de estado actual, no como historial
 
 # Pendientes
 
-Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/`, los argumentos separan parser/ayuda/validación, `piper.hpp` es fachada pública, el scheduler delega métricas JSON/WAV/chunks/estado a módulos `server/jobs/`, el sanitizer API vive separado en `server/sanitize/`, `loadVoice()` recibe `speakerId` como referencia const, markup TTS vive dividido en `server/markup/`, las rutas HTTP viven separadas en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader y el chunking de texto vive separado en `core/text/` y la política automática de recursos vive separada de la detección de hardware.
+Mantener estos archivos actualizados cuando cambien arquitectura, build, API, normalización, paquetes `.neo` o pruebas. El subsistema `.neo` ya vive en `src/cpp/neo/`, `neo_model.cpp` es solo fachada pública, los modos CLI viven en módulos específicos bajo `src/cpp/app/`, los argumentos separan parser/ayuda/validación, `piper.hpp` es fachada pública, el scheduler delega métricas JSON/WAV/chunks/estado a módulos `server/jobs/`, el sanitizer API vive separado en `server/sanitize/`, `loadVoice()` recibe `speakerId` como referencia const, markup TTS vive dividido en `server/markup/`, las rutas HTTP viven separadas en `server/routes/`, HTTP base vive en `server/http/`, cache de modelos se separa en runtime/loader y el chunking de texto vive separado en `core/text/` y la política automática de recursos vive separada de la detección de hardware. La fonemización eSpeak/tashkeel queda protegida con mutex de alcance corto y model_cache evita cargas iniciales concurrentes del mismo modelo.
 
 # Próximos pasos
 

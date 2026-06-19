@@ -260,6 +260,7 @@ ctest --test-dir /tmp/piper-neo-cmake-check-tests -R "test_neo_package|test_text
 python script/smoke-piper-binary.py --models models
 # You can also pass the binary explicitly:
 python script/smoke-piper-binary.py --binary dist-winlibs/piper-neo-windows/piper.exe --models models
+python script/smoke-piper-binary.py --binary dist-winlibs/piper-neo-windows/piper.exe --models models --stress-api-requests 4
 ```
 
 ## Internal C++ architecture

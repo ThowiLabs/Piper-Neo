@@ -21,6 +21,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -258,8 +259,53 @@ def test_cli(binary: Path, model: Path, config: Path | None, text: str, work_dir
     assert_wav(output)
 
 
+def run_tts_request(base_url: str, text: str, token: str | None, timeout: int,
+                    output_path: Path) -> None:
+    status, tts_payload = http_json("POST", f"{base_url}/api/v1/tts", {"text": text}, token=token, timeout=timeout)
+    if status != 201:
+        fail(f"/api/v1/tts devolvio {status}: {tts_payload}")
+    data = tts_payload.get("data") if isinstance(tts_payload, dict) else None
+    file_url = data.get("url") if isinstance(data, dict) else None
+    if not file_url:
+        fail(f"Respuesta TTS sin data.url: {tts_payload}")
+    status, wav_data = http_bytes(f"{base_url}{file_url}", token=token, timeout=timeout)
+    if status != 200:
+        fail(f"Descarga de WAV devolvio {status}")
+    output_path.write_bytes(wav_data)
+    assert_wav(output_path)
+
+
+def run_api_stress(base_url: str, text: str, token: str | None, timeout: int,
+                   work_dir: Path, requests: int) -> None:
+    if requests <= 0:
+        return
+
+    errors: list[str] = []
+    lock = threading.Lock()
+
+    def worker(index: int) -> None:
+        try:
+            long_text = (text.strip() + " ") * 120
+            run_tts_request(base_url, long_text.strip(), token, timeout,
+                            work_dir / f"api-stress-{index}.wav")
+        except Exception as exc:  # pragma: no cover - diagnostic path
+            with lock:
+                errors.append(f"stress #{index}: {exc}")
+
+    threads = [threading.Thread(target=worker, args=(index,), daemon=True)
+               for index in range(requests)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout + 10)
+
+    if errors:
+        fail("; ".join(errors))
+    log(f"API stress OK: {requests} request(s) concurrentes")
+
+
 def test_api(binary: Path, models_dir: Path, text: str, work_dir: Path, token: str | None,
-             timeout: int) -> None:
+             timeout: int, stress_requests: int) -> None:
     process, base_url = start_server(binary, models_dir, work_dir / "api-output", token, timeout)
     try:
         if token:
@@ -284,21 +330,10 @@ def test_api(binary: Path, models_dir: Path, text: str, work_dir: Path, token: s
             fail(f"JSON invalido/missing fields esperaba 400; obtuvo {status}: {invalid_payload}")
         log("/api/v1/tts validacion negativa OK")
 
-        status, tts_payload = http_json("POST", f"{base_url}/api/v1/tts", {"text": text}, token=token, timeout=timeout)
-        if status != 201:
-            fail(f"/api/v1/tts devolvio {status}: {tts_payload}")
-        data = tts_payload.get("data") if isinstance(tts_payload, dict) else None
-        file_url = data.get("url") if isinstance(data, dict) else None
-        if not file_url:
-            fail(f"Respuesta TTS sin data.url: {tts_payload}")
-        log(f"/api/v1/tts OK: {file_url}")
+        run_tts_request(base_url, text, token, timeout, work_dir / "api-test.wav")
+        log("/api/v1/tts OK")
 
-        status, wav_data = http_bytes(f"{base_url}{file_url}", token=token, timeout=timeout)
-        if status != 200:
-            fail(f"Descarga de WAV devolvio {status}")
-        wav_path = work_dir / "api-test.wav"
-        wav_path.write_bytes(wav_data)
-        assert_wav(wav_path)
+        run_api_stress(base_url, text, token, timeout, work_dir, stress_requests)
     finally:
         stop_server(process)
 
@@ -313,6 +348,8 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument("--skip-cli", action="store_true", help="No probar sintesis CLI")
     parser.add_argument("--skip-api", action="store_true", help="No levantar/probar API HTTP")
     parser.add_argument("--keep-temp", action="store_true", help="Conservar carpeta temporal de resultados")
+    parser.add_argument("--stress-api-requests", type=int, default=2,
+                        help="Peticiones TTS concurrentes de texto largo para detectar problemas de eSpeak/model cache")
     return parser.parse_args(list(argv))
 
 
@@ -334,7 +371,7 @@ def main(argv: Iterable[str]) -> int:
             test_cli(binary, model, config, args.text, temp_root, args.timeout)
         if not args.skip_api:
             token = args.api_token.strip() or None
-            test_api(binary, models_dir, args.text, temp_root, token, args.timeout)
+            test_api(binary, models_dir, args.text, temp_root, token, args.timeout, args.stress_api_requests)
         log("SMOKE_OK")
         return 0
     finally:

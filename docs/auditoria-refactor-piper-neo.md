@@ -108,3 +108,9 @@ Pendiente: pruebas funcionales más específicas para scanner/metadata/cache, sc
 ## Smoke del binario final
 
 Se agregó `script/smoke-piper-binary.py` para probar un binario ya compilado con modelos reales: `--help`, `--version`, síntesis CLI, arranque de API, health/status/metrics, listado de modelos, validación negativa de TTS, generación TTS por API y descarga WAV.
+
+## Corrección de concurrencia eSpeak/model cache
+
+Se corrigió una regresión detectada con textos largos y varios modelos en modo API: varios chunks podían cargar réplicas del mismo modelo en paralelo y fonemizar simultáneamente con eSpeak-ng. En Windows esto podía producir `Bad data: es_dict length=0`.
+
+La solución serializa solo la sección global de eSpeak/tashkeel y evita cargas iniciales concurrentes del mismo modelo. La inferencia ONNX y las réplicas siguen disponibles para paralelismo después de la fonemización. El smoke del binario final ahora permite stress concurrente con `--stress-api-requests`.

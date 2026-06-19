@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -23,6 +24,16 @@ struct PhrasePhonemes {
   std::vector<Phoneme> phonemes;
   std::size_t silenceSamplesAfter = 0;
 };
+
+std::mutex &globalPhonemizeMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+std::mutex &globalTashkeelMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
 
 class SentenceSilenceGuard {
 public:
@@ -65,6 +76,10 @@ std::string maybeDiacritizeText(PiperConfig &config, std::string text) {
 
   spdlog::debug("Diacritizing text with libtashkeel: {}",
                 core::previewTextForLog(text));
+
+  // libtashkeel keeps mutable model state behind the State object. The server can
+  // process chunks in parallel, so guard this global-ish resource explicitly.
+  std::lock_guard<std::mutex> lock(globalTashkeelMutex());
   return tashkeel::tashkeel_run(text, *config.tashkeelState);
 }
 
@@ -76,6 +91,12 @@ std::vector<std::vector<Phoneme>> phonemizeText(const Voice &voice,
   if (voice.phonemizeConfig.phonemeType == eSpeakPhonemes) {
     eSpeakPhonemeConfig eSpeakConfig;
     eSpeakConfig.voice = voice.phonemizeConfig.eSpeak.voice;
+
+    // eSpeak-ng/piper-phonemize uses process-global dictionary state. Parallel
+    // phonemization can corrupt reads on Windows (for example: es_dict length=0).
+    // Keep the lock scoped to phonemization so ONNX inference can still run in
+    // parallel across model replicas.
+    std::lock_guard<std::mutex> lock(globalPhonemizeMutex());
     phonemize_eSpeak(text, eSpeakConfig, phonemes);
   } else {
     CodepointsPhonemeConfig codepointsConfig;

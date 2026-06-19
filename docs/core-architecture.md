@@ -255,3 +255,11 @@ src/cpp/server/model_paths.cpp      Claves canónicas compartidas por registry/c
 ```
 
 Esta separación mantiene el contrato público del servidor pero reduce acoplamiento y facilita pruebas unitarias pequeñas como `test_http_parser`.
+
+## Seguridad de concurrencia eSpeak/tashkeel
+
+El servidor puede procesar chunks y peticiones en paralelo, pero eSpeak-ng y piper-phonemize usan estado global del proceso. Para evitar errores intermitentes en Windows como `Bad data: es_dict length=0`, la fonemización eSpeak se serializa con un mutex global de alcance corto. El lock solo cubre la conversión texto -> fonemas; la inferencia ONNX puede seguir ejecutándose en paralelo por réplica de modelo.
+
+`model_cache.*` también evita el stampede de carga inicial: si varios chunks piden el mismo modelo sin cache, solo un hilo carga la primera réplica y los demás esperan a que exista un slot usable antes de crear réplicas adicionales.
+
+`script/smoke-piper-binary.py` incluye `--stress-api-requests` para lanzar peticiones TTS concurrentes con texto largo y detectar regresiones de eSpeak/model cache después de compilar el binario real.

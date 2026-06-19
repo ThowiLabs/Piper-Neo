@@ -193,6 +193,7 @@ EXPECTED_CONTEXT = {
     "21-refactor-cache-modelos.md",
     "22-refactor-text-chunker.md",
     "23-refactor-hardware-policy.md",
+    "24-correccion-concurrencia-espeak.md",
 }
 
 
@@ -251,6 +252,16 @@ def main() -> None:
         fail("tts_scheduler.cpp no debe contener reportes JSON de métricas")
     if "std::array<char, 64 * 1024>" in tts_scheduler_cpp:
         fail("tts_scheduler.cpp no debe ensamblar WAV por buffers")
+
+    synthesis_pipeline_cpp = (ROOT / "src/cpp/core/synthesis_pipeline.cpp").read_text(encoding="utf-8")
+    if "globalPhonemizeMutex" not in synthesis_pipeline_cpp or "phonemize_eSpeak" not in synthesis_pipeline_cpp:
+        fail("synthesis_pipeline.cpp debe proteger la fonemización eSpeak concurrente")
+    if "globalTashkeelMutex" not in synthesis_pipeline_cpp or "tashkeel_run" not in synthesis_pipeline_cpp:
+        fail("synthesis_pipeline.cpp debe proteger libtashkeel concurrente")
+
+    model_cache_cpp = (ROOT / "src/cpp/server/model_cache.cpp").read_text(encoding="utf-8")
+    if "runtime->loadingSlots > 0" not in model_cache_cpp:
+        fail("model_cache.cpp debe evitar cargas iniciales concurrentes del mismo modelo")
 
     http_cpp = (ROOT / "src/cpp/server/http.cpp").read_text(encoding="utf-8")
     http_url_cpp = (ROOT / "src/cpp/server/http/url.cpp").read_text(encoding="utf-8")

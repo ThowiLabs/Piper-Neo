@@ -1,6 +1,6 @@
 # Normalización de texto en Piper Neo
 
-Piper Neo agrega una capa de normalización antes de `phonemize`. Esta capa prepara el texto para que el motor TTS pronuncie mejor marcas, números y texto técnico.
+Piper Neo agrega una capa de normalización antes de `phonemize`. Esta capa prepara marcas, enlaces, correos y texto técnico sin convertir números desde el core.
 
 ## Flujo
 
@@ -62,18 +62,18 @@ Los reemplazos se ordenan por `priority` y después por longitud. Esto permite q
 - `priority`: mayor número se aplica primero.
 - `note`: documentación para humanos.
 
-## Reglas inteligentes incluidas
+## Reglas builtin incluidas
 
-Piper Neo incluye normalización básica para español, pero ninguna regla inteligente se activa por defecto. Cada modelo decide qué banderas habilitar en `neo.text_normalization.builtin`:
+Piper Neo no convierte números, moneda, porcentajes ni versiones desde el core. Esas reglas deben vivir en `neo.text_normalization.replacements` de cada modelo.
+
+Las únicas reglas builtin activas son protección/lectura básica de URLs y correos, y tampoco se activan por defecto:
 
 ```txt
-3.5             → tres punto cinco
-10.25%         → 10 punto 25 por ciento
-$10.25         → 10 punto 25 pesos
-v1.0.3          → versión uno punto cero punto tres
 correo@x.com    → correo arroba x punto com
 https://x.com   → x punto com, solo si el modelo activa builtin.urls
 ```
+
+Las banderas antiguas `decimals`, `versions`, `percentages` y `currency` se toleran en el JSON por compatibilidad, pero ya no hacen conversiones en el core.
 
 
 ## Compatibilidad legacy
@@ -109,17 +109,6 @@ Por ejemplo, si existe el reemplazo `GitHub → Guit Jab` y el modelo activa `bu
 
 También se recorta puntuación final común en URLs cuando `builtin.urls` está activo, para que `https://youtube.com.` no se lea con un `punto` extra del final de la oración.
 
-## Moneda con sufijo
-
-La regla de moneda consume sufijos comunes para evitar duplicados:
-
-```txt
-$99.50 pesos  → 99 punto 50 pesos
-USD 10.25     → 10 punto 25 dólares
-```
-
-Así se evita que `$99.50 pesos` termine duplicando unidades, y también se evita inventar `centavos` cuando el usuario escribió un decimal monetario.
-
 ## Auditoría de seguridad de aplicación
 
 El administrador de modelos trabaja sobre una copia temporal mientras el usuario edita un modelo. Si se presiona Cancelar, se descartan cambios de metadata, imagen y reemplazos. Solo al presionar Guardar se copia el contenido de vuelta al registro y se escribe el `.onnx.json`.
@@ -138,4 +127,4 @@ Este script compila únicamente los módulos de normalización y verifica tres g
 
 - Un JSON clásico no modifica el texto.
 - `modelcard.replacements` legacy sigue funcionando.
-- Las reglas builtin protegen URLs/moneda antes de aplicar reemplazos personalizados.
+- Las reglas builtin protegen URLs/correos antes de aplicar reemplazos personalizados.

@@ -18,7 +18,6 @@ Documentar la normalización de texto configurable por modelo.
 ```text
 src/cpp/text_normalizer.cpp       API pública parse/normalize
 src/cpp/text/string_utils.*       utilidades de strings y límites
-src/cpp/text/spanish_numbers.*    números básicos en español
 src/cpp/text/replacements.*       reemplazos configurables
 src/cpp/text/builtin_normalizer.* reglas builtin protegidas
 ```

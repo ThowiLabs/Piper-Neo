@@ -122,7 +122,6 @@ set(PIPER_TEXT_SOURCES
   src/cpp/text/builtin_renderers.cpp
   src/cpp/text/protected_segments.cpp
   src/cpp/text/replacements.cpp
-  src/cpp/text/spanish_numbers.cpp
   src/cpp/text/string_utils.cpp
   src/cpp/text_normalizer.cpp
 )

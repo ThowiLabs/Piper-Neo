@@ -257,7 +257,6 @@ EXPECTED_CONTEXT = {
     "27-refactor-tts-route-request.md",
     "28-correccion-build-data-image-route.md",
     "29-refactor-sentence-splitter-model-tests.md",
-    "30-refactor-synthesis-mode-text-builtins.md",
 }
 
 
@@ -356,6 +355,13 @@ def main() -> None:
 
     if '#include "types.hpp"' in (ROOT / "src/cpp/server/utils.hpp").read_text(encoding="utf-8"):
         fail("utils.hpp no debe incluir server/types.hpp")
+
+
+    for removed in ["src/cpp/text/spanish_numbers.cpp", "src/cpp/text/spanish_numbers.hpp"]:
+        if (ROOT / removed).exists():
+            fail(f"normalizador numerico eliminado no debe existir: {removed}")
+    if "spanish_numbers.cpp" in cmake or "spanish_numbers.hpp" in cmake:
+        fail("CMakeLists.txt no debe referenciar spanish_numbers")
 
     if (ROOT / "apps").exists():
         fail("apps/ no debe existir en el repo público del motor Piper Neo")

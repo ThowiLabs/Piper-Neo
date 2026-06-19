@@ -5,15 +5,8 @@
 
 namespace piper::textnorm {
 
-std::string versionToSpanish(const std::string &version);
-std::string emailToSpanish(const std::string &email);
-std::string urlToSpanish(const std::string &url);
-std::string currencyToSpanish(const std::string &currencyRaw,
-                              const std::string &suffixRaw,
-                              const std::string &integerPart,
-                              const std::string &fractionPart);
-std::string percentageToSpanish(const std::string &integerPart,
-                                const std::string &fractionPart);
+std::string emailToSpeechText(const std::string &email);
+std::string urlToSpeechText(const std::string &url);
 
 } // namespace piper::textnorm
 

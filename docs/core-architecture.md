@@ -148,7 +148,6 @@ La API pública se mantiene en `text_normalizer.hpp`, pero la implementación qu
 ```text
 text_normalizer.cpp          Orquestación pública: parse config + normalize.
 text/string_utils.*          Utilidades ASCII, límites de palabra y puntuación final.
-text/spanish_numbers.*       Conversión numérica básica a español.
 text/replacements.*          Reglas personalizadas por modelo y legacy replacements.
 text/builtin_normalizer.*    Builtins protegidos: URL, email, versión, moneda, porcentaje y decimal.
 ```

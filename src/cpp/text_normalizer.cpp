@@ -14,10 +14,10 @@ void parseBuiltinFlags(const nlohmann::json &root,
     return;
   }
 
-  builtin.decimals = root.value("decimals", builtin.decimals);
-  builtin.versions = root.value("versions", builtin.versions);
-  builtin.percentages = root.value("percentages", builtin.percentages);
-  builtin.currency = root.value("currency", builtin.currency);
+  // Las banderas numericas se conservan en la estructura para compatibilidad
+  // con JSON antiguos, pero Piper Neo ya no convierte numeros, moneda,
+  // porcentajes ni versiones desde el core. Ese comportamiento debe vivir en
+  // replacements especificos por modelo.
   builtin.urls = root.value("urls", builtin.urls);
   builtin.emails = root.value("emails", builtin.emails);
 }
@@ -50,9 +50,9 @@ void parseTextNormalizationConfig(const nlohmann::json &configRoot,
         config.locale = tn.value("locale", config.locale);
 
         // Piper Neo no aplica reglas inteligentes por defecto. Cada modelo
-        // debe declarar explicitamente que tipo de normalizacion quiere usar
-        // en neo.text_normalization.builtin. Esto evita que el core convierta
-        // URLs, dominios, moneda o porcentajes sin control del modelo.
+        // debe declarar explicitamente si quiere proteccion de URLs/correos.
+        // La conversion de numeros, moneda, porcentajes o versiones queda fuera
+        // del core y debe resolverse con replacements por modelo.
         if (tn.contains("builtin")) {
           parseBuiltinFlags(tn["builtin"], config.builtin);
         }

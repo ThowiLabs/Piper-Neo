@@ -1,13 +1,13 @@
 name: Build Release Piper Neo
-run-name: Build Release Piper Neo #${{ github.run_number }} · ${{ github.ref_name }}
+run-name: Build Release Piper Neo #${{ github.run_number }}
 
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Tag/version del release. Si se deja vacío, calcula la siguiente versión numérica."
+        description: "Tag de release. Si se deja vacío, se calcula 1.0, 1.1, 1.2..."
         required: false
-        default: ""
+        type: string
       prerelease:
         description: "Marcar como prerelease"
         required: false
@@ -18,96 +18,87 @@ permissions:
   contents: write
 
 jobs:
-  build-windows-amd64:
-    name: Build Windows amd64
+  build-windows:
+    name: Windows amd64
     runs-on: windows-latest
+
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
 
-      - name: Build Piper Neo
-        shell: cmd
+      - name: Build Windows package
+        shell: pwsh
         run: |
           py script\build-windows.py clean
           py script\build-windows.py
 
-      - name: Smoke test binary
-        shell: cmd
+      - name: Smoke binary help
+        shell: pwsh
         run: |
-          dist-winlibs\piper-neo-windows\piper.exe --help
+          .\dist-winlibs\piper-neo-windows\piper.exe --help
 
       - name: Package artifact
         shell: pwsh
         run: |
+          if (Test-Path piper_windows_amd64.zip) { Remove-Item piper_windows_amd64.zip -Force }
           Compress-Archive -Path dist-winlibs\piper-neo-windows\* -DestinationPath piper_windows_amd64.zip -Force
 
-      - name: Upload workflow artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: piper_windows_amd64
           path: piper_windows_amd64.zip
-          if-no-files-found: error
 
   release:
-    name: Create GitHub Release
+    name: GitHub Release
     runs-on: ubuntu-latest
-    needs: build-windows-amd64
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
+    needs: build-windows
 
-      - name: Download Windows artifact
+    steps:
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: piper_windows_amd64
-          path: release-artifacts
+          path: release-assets
 
       - name: Resolve release tag
-        id: version
+        id: tag
         env:
-          INPUT_TAG: ${{ inputs.release_tag }}
           GH_TOKEN: ${{ github.token }}
-        shell: bash
+          INPUT_TAG: ${{ inputs.release_tag }}
         run: |
-          set -euo pipefail
-          if [[ -n "${INPUT_TAG}" ]]; then
-            tag="${INPUT_TAG}"
-          else
-            last=$(gh release list --limit 100 --json tagName --jq '.[].tagName' \
-              | grep -E '^[0-9]+\.[0-9]+$' \
-              | sort -V \
-              | tail -n 1 || true)
-            if [[ -z "${last}" ]]; then
-              tag="1.0"
-            else
-              major="${last%%.*}"
-              minor="${last##*.}"
-              tag="${major}.$((minor + 1))"
-            fi
+          if [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+          last=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -E '^[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          if [ -z "$last" ]; then
+            next="1.0"
+          else
+            major="${last%%.*}"
+            minor="${last##*.}"
+            next="$major.$((minor + 1))"
+          fi
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          TAG: ${{ steps.tag.outputs.tag }}
           PRERELEASE: ${{ inputs.prerelease }}
-        shell: bash
         run: |
-          set -euo pipefail
-          flags=(--title "Piper Neo ${RELEASE_TAG}" --notes "Build Windows amd64 de Piper Neo." --target main)
-          if [[ "${PRERELEASE}" == "true" ]]; then
-            flags+=(--prerelease)
+          flags="--latest"
+          if [ "$PRERELEASE" = "true" ]; then
+            flags="--prerelease"
           fi
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release edit "${RELEASE_TAG}" "${flags[@]}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Piper Neo $TAG" $flags
           else
-            gh release create "${RELEASE_TAG}" "${flags[@]}"
+            gh release create "$TAG" --title "Piper Neo $TAG" --notes "Build manual de Piper Neo." $flags
           fi
-          gh release upload "${RELEASE_TAG}" release-artifacts/piper_windows_amd64.zip --clobber
+
+          gh release upload "$TAG" release-assets/piper_windows_amd64.zip --clobber

@@ -9,10 +9,6 @@ namespace piper::textnorm {
 struct BuiltinPatterns {
   std::regex url;
   std::regex email;
-  std::regex version;
-  std::regex currencyPrefix;
-  std::regex percent;
-  std::regex decimal;
 
   BuiltinPatterns();
 };

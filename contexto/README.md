@@ -48,7 +48,6 @@ Leer en este orden:
 27. `27-refactor-tts-route-request.md`
 28. `28-correccion-build-data-image-route.md`
 29. `29-refactor-sentence-splitter-model-tests.md`
-30. `30-refactor-synthesis-mode-text-builtins.md`
 
 # Librerías usadas
 

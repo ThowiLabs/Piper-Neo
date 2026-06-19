@@ -8,14 +8,7 @@ BuiltinPatterns::BuiltinPatterns()
     : url(R"(((?:https?://|www\.)[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+))",
           std::regex::ECMAScript | std::regex::icase),
       email(R"(([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}))",
-            std::regex::ECMAScript),
-      version(R"((v?\d+(?:\.\d+){2,}))",
-              std::regex::ECMAScript | std::regex::icase),
-      currencyPrefix(
-          R"((\$|MXN\s+|USD\s+)(\d+)(?:\.(\d+))?(?:\s*(pesos?|mxn|USD|dolares|dólares))?)",
-          std::regex::ECMAScript | std::regex::icase),
-      percent(R"((\d+)\.(\d+)%|(\d+)%)", std::regex::ECMAScript),
-      decimal(R"((\d+)\.(\d+))", std::regex::ECMAScript) {}
+            std::regex::ECMAScript) {}
 
 const BuiltinPatterns &builtinPatterns() {
   static const BuiltinPatterns patterns;

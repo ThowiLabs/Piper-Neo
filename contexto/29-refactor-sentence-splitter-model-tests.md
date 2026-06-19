@@ -59,5 +59,5 @@ Continuar el endurecimiento final del core Piper Neo después de validar el smok
 
 # Próximos pasos
 
-- Revisar `builtin_normalizer.cpp` y `spanish_numbers.cpp` solo si se agregan pruebas específicas de normalización.
+- La conversión numérica queda fuera del core y debe resolverse con replacements por modelo.
 - Revisar `synthesis_mode.cpp` si se quiere separar aún más el CLI interactivo, aunque no es urgente.

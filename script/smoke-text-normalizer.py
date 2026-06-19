@@ -23,7 +23,6 @@ SOURCES = [
     ROOT / "src/cpp/text/builtin_renderers.cpp",
     ROOT / "src/cpp/text/protected_segments.cpp",
     ROOT / "src/cpp/text/replacements.cpp",
-    ROOT / "src/cpp/text/spanish_numbers.cpp",
     ROOT / "src/cpp/text/string_utils.cpp",
     ROOT / "src/cpp/text_normalizer.cpp",
 ]
@@ -72,9 +71,9 @@ int main() {
 
   {
     auto config = parseConfig(R"json({"neo":{"text_normalization":{"enabled":true,"builtin":{"decimals":true,"currency":true,"urls":true},"replacements":[{"from":"GitHub","to":"Guit Jab","whole_word":true}]}}})json");
-    expectEqual("builtins protegidos y reemplazos",
+    expectEqual("builtins seguros sin numeros",
                 piper::normalizeTextForSpeech("Paga $99.50 pesos en https://github.com y abre GitHub 3.5", config),
-                "Paga 99 punto 50 pesos en github punto com y abre Guit Jab tres punto cinco");
+                "Paga $99.50 pesos en github punto com y abre Guit Jab 3.5");
   }
 
   return 0;

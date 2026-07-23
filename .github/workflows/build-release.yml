@@ -13,20 +13,101 @@ on:
         required: false
         default: false
         type: boolean
+  push:
+    tags:
+      - "*"
 
 permissions:
   contents: write
 
 jobs:
+  build-linux:
+    name: Linux ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - name: x86_64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            source_name: piper_amd64.tar.gz
+            artifact_name: piper_linux_x86_64
+            asset_name: piper_linux_x86_64.tar.gz
+            qemu: false
+          - name: aarch64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            source_name: piper_arm64.tar.gz
+            artifact_name: piper_linux_aarch64
+            asset_name: piper_linux_aarch64.tar.gz
+            qemu: false
+          - name: armv7l
+            runner: ubuntu-24.04
+            platform: linux/arm/v7
+            source_name: piper_armv7.tar.gz
+            artifact_name: piper_linux_armv7l
+            asset_name: piper_linux_armv7l.tar.gz
+            qemu: true
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+
+      - name: Set up QEMU for ARMv7
+        if: ${{ matrix.qemu }}
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Linux ${{ matrix.name }} package
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE_NAME: ${{ matrix.source_name }}
+          ASSET_NAME: ${{ matrix.asset_name }}
+        run: |
+          set -euo pipefail
+          rm -rf dist release-assets
+          mkdir -p release-assets
+
+          docker buildx build . \
+            --platform "$PLATFORM" \
+            --output type=local,dest=dist
+
+          source_file="$(find dist -type f -name "$SOURCE_NAME" -print -quit)"
+          if [ -z "$source_file" ] || [ ! -f "$source_file" ]; then
+            echo "No se encontró el paquete esperado: $SOURCE_NAME"
+            find dist -maxdepth 4 -type f -print || true
+            exit 1
+          fi
+
+          cp "$source_file" "release-assets/$ASSET_NAME"
+          test -s "release-assets/$ASSET_NAME"
+          ls -lh "release-assets/$ASSET_NAME"
+
+      - name: Upload Linux ${{ matrix.name }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release-assets/${{ matrix.asset_name }}
+          if-no-files-found: error
+
   build-windows:
     name: Windows amd64
     runs-on: windows-latest
 
     steps:
-      - name: Checkout main
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
       - name: Build Windows package
         shell: pwsh
@@ -42,39 +123,71 @@ jobs:
       - name: Package artifact
         shell: pwsh
         run: |
-          if (Test-Path piper_windows_amd64.zip) { Remove-Item piper_windows_amd64.zip -Force }
+          if (Test-Path piper_windows_amd64.zip) {
+            Remove-Item piper_windows_amd64.zip -Force
+          }
           Compress-Archive -Path dist-winlibs\piper-neo-windows\* -DestinationPath piper_windows_amd64.zip -Force
 
-      - name: Upload artifact
+      - name: Upload Windows amd64 artifact
         uses: actions/upload-artifact@v4
         with:
           name: piper_windows_amd64
           path: piper_windows_amd64.zip
+          if-no-files-found: error
 
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    needs: build-windows
+    needs:
+      - build-linux
+      - build-windows
 
     steps:
-      - name: Download artifact
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          name: piper_windows_amd64
+          pattern: piper_*
           path: release-assets
+          merge-multiple: true
+
+      - name: Verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/piper_linux_x86_64.tar.gz
+          test -s release-assets/piper_linux_aarch64.tar.gz
+          test -s release-assets/piper_linux_armv7l.tar.gz
+          test -s release-assets/piper_windows_amd64.zip
+          ls -lah release-assets
 
       - name: Resolve release tag
         id: tag
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.release_tag }}
         run: |
-          if [ -n "$INPUT_TAG" ]; then
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "${INPUT_TAG:-}" ]; then
             echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | grep -E '^[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          last=$(gh release list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 100 \
+            --json tagName \
+            --jq '.[].tagName' \
+            | grep -E '^[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -n 1 || true)
+
           if [ -z "$last" ]; then
             next="1.0"
           else
@@ -82,23 +195,53 @@ jobs:
             minor="${last##*.}"
             next="$major.$((minor + 1))"
           fi
+
           echo "tag=$next" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          flags="--latest"
-          if [ "$PRERELEASE" = "true" ]; then
-            flags="--prerelease"
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            PRERELEASE="false"
           fi
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Piper Neo $TAG" $flags
+            if [ "$PRERELEASE" = "true" ]; then
+              gh release edit "$TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "Piper Neo $TAG" \
+                --prerelease \
+                --latest=false
+            else
+              gh release edit "$TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "Piper Neo $TAG" \
+                --prerelease=false \
+                --latest
+            fi
           else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Piper Neo $TAG" --notes "Build manual de Piper Neo." $flags
+            if [ "$PRERELEASE" = "true" ]; then
+              gh release create "$TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "Piper Neo $TAG" \
+                --notes "Build multiplataforma de Piper Neo para Linux y Windows." \
+                --prerelease \
+                --latest=false
+            else
+              gh release create "$TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "Piper Neo $TAG" \
+                --notes "Build multiplataforma de Piper Neo para Linux y Windows." \
+                --latest
+            fi
           fi
 
-          gh release upload "$TAG" release-assets/piper_windows_amd64.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber

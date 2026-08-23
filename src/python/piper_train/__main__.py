@@ -6,6 +6,8 @@ from pathlib import Path
 import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from packaging.version import Version
+import pytorch_lightning as pl
 
 from .vits.lightning import VitsModel
 
@@ -14,6 +16,17 @@ _LOGGER = logging.getLogger(__package__)
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
+
+    # Piper Neo's VITS trainer intentionally uses the Lightning 1.x API:
+    # training_step(..., optimizer_idx) and Trainer argparse integration.
+    # Newer Lightning releases removed that API and fail later with much less
+    # useful errors (for example, Trainer.add_argparse_args missing).
+    if Version(pl.__version__) >= Version("2.0.0"):
+        raise RuntimeError(
+            "Piper Neo training requires pytorch-lightning 1.9.x. "
+            f"Detected {pl.__version__}. Install the pinned training requirements "
+            "from src/python/requirements.txt."
+        )
 
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from .hf_backup import resolve_repo_id, sync_verified_checkpoints
+from .hf_settings import hf_auth_token, select_hf_repo, require_hf_auth_for_private_repo
 from huggingface_hub import HfApi
 
 _SYNC_LOCK = threading.Lock()
@@ -44,17 +45,34 @@ class BackupWatcher:
 
     def start(self, project: Path, repo_id: str, token: str,
               private: bool, interval: int):
-        token = (token or os.environ.get("HF_TOKEN", "")).strip()
-        if not repo_id or not repo_id.strip():
-            raise ValueError("Falta el repositorio HF (usuario/modelo).")
+        token = hf_auth_token(token)
+        repo_id = select_hf_repo(repo_id)
+        require_hf_auth_for_private_repo(repo_id, token)
         if not token:
-            raise ValueError("Falta token HF o variable HF_TOKEN.")
-        # Resolve username/model once before starting, not on every polling cycle.
-        resolved_repo = resolve_repo_id(repo_id, token, api=HfApi(token=token))
+            raise ValueError("Para respaldo HF automático hace falta token Write o HF_TOKEN.")
+        # An explicit namespace is not evidence that a token is still valid.
+        # Verify the real token before storing it for any automatic transfers.
+        api = HfApi(token=token)
+        api.whoami(token=token)
+        resolved_repo = resolve_repo_id(repo_id, token, api=api)
         with self.lock:
             if self.running():
-                if (self.details["project"] == project and
+                if (self.details["project"] == Path(project) and
                         self.details["repo_id"] == resolved_repo):
+                    if self.stop_event.is_set():
+                        raise ValueError(
+                            "El respaldo aún se está deteniendo. "
+                            "Espera a que cambie a desactivado y actívalo de nuevo."
+                        )
+                    # KEY FIX: a new token for the SAME repo must replace the
+                    # old token held in server RAM without stopping training.
+                    refreshed = self.details["token"] != token
+                    self.details.update({
+                        "token": token, "private": bool(private),
+                        "interval": max(15, int(interval)),
+                    })
+                    if refreshed:
+                        self.last_report = "Credenciales HF renovadas; próximo respaldo usa el token nuevo."
                     return self.status()
                 raise ValueError(
                     "Ya hay un respaldo activo para otro proyecto o repo. "
@@ -112,8 +130,15 @@ class BackupWatcher:
                     log.write(f"[{self.last_sync}] {message}\n")
             except Exception as exc:
                 with self.lock:
-                    self.last_report = f"ERROR: {exc}"
+                    self.last_report = f"ERROR: {type(exc).__name__}: {exc}"
                     self.last_sync = time.strftime("%Y-%m-%d %H:%M:%S")
+                try:
+                    path = details["project"] / "hf_backup.log"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with path.open("a", encoding="utf-8") as log:
+                        log.write(f"[{self.last_sync}] {self.last_report}\n")
+                except OSError:
+                    pass
             if self.stop_event.wait(details["interval"]):
                 break
 

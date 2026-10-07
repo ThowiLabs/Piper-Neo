@@ -12,11 +12,18 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
 
 from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
+
+from .hf_settings import (
+    DEFAULT_HF_REPO, hf_auth_token, select_hf_repo,
+    require_hf_auth_for_private_repo,
+)
 
 from .checkpoint_guard import CHECKPOINT_NAME, stable_file
 
@@ -151,12 +158,80 @@ def _confirmed_remote_size(api: Any, repo_id: str, remote_path: str, expected: i
     )
 
 
+def _ensure_remote_model_repo(api: Any, repo_id: str, token: str, private: bool) -> str:
+    """Never call /api/repos/create for an existing private model repo.
+
+    Repo creation needs extra permissions and can fail with 401 even when
+    uploading to an *existing* repo is allowed by a fine-grained token.
+    """
+    try:
+        api.repo_info(repo_id=repo_id, repo_type="model", token=token)
+        return "already_exists"
+    except RepositoryNotFoundError as error:
+        code = getattr(getattr(error, "response", None), "status_code", None)
+        # HF can disguise inaccessible private models as Not Found. This
+        # known existing repo must NEVER be treated as a new empty repo.
+        if code in (401, 403) or repo_id == DEFAULT_HF_REPO:
+            raise PermissionError(
+                f"No se puede acceder al repositorio privado {repo_id} "
+                f"(HTTP {code or 'desconocido'}). Verifica que el token tenga "
+                "permiso de lectura y escritura sobre ESE repositorio; "
+                "no se intentará recrearlo."
+            ) from error
+        if code != 404:
+            raise
+        # Only a genuinely new repo (not the known private backup) can be
+        # created after an authenticated, exact 404 response.
+    except HfHubHTTPError as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        if status in (401, 403):
+            raise PermissionError(
+                f"HF devolvió HTTP {status} al acceder a {repo_id}. "
+                "El token no puede leer este repositorio privado, está "
+                "caducado o no tiene permisos para este repo."
+            ) from error
+        raise
+    api.create_repo(
+        repo_id=repo_id, repo_type="model", token=token,
+        private=bool(private), exist_ok=True,
+    )
+    return "created"
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _cli_upload_checkpoint(repo_id: str, checkpoint: Path, token: str) -> None:
+    """Use the proven CLI transport if HfApi's large-file transfer fails.
+
+    The token is passed ONLY by process environment, never on command line.
+    This helper must be called only after the Hub was checked for an existing
+    remote filename. Never use a delete/overwrite or force flag.
+    """
+    cli = Path(sys.executable).with_name("huggingface-cli")
+    if not cli.is_file():
+        raise RuntimeError(
+            "No existe huggingface-cli en el entorno Python; "
+            "comprueba la instalación de huggingface_hub."
+        )
+    env = {**os.environ, "HF_TOKEN": token, "HF_HUB_ENABLE_HF_TRANSFER": "0"}
+    result = subprocess.run(
+        [str(cli), "upload", repo_id, str(checkpoint), checkpoint.name,
+         "--repo-type", "model",
+         "--commit-message", f"Back up validated Piper {checkpoint.name}"],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, timeout=900,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f"La subida alternativa CLI falló (código {result.returncode}): "
+            + (result.stderr or result.stdout or "sin detalles")[-1200:]
+        )
 
 
 def _ensure_remote_config(api: Any, repo_id: str, token: str, config: Path) -> str:
@@ -167,7 +242,7 @@ def _ensure_remote_config(api: Any, repo_id: str, token: str, config: Path) -> s
         # Checkpoint is already valid before this function is called.
         api.upload_file(
             path_or_fileobj=str(config), path_in_repo=remote_path,
-            repo_id=repo_id, repo_type="model",
+            repo_id=repo_id, repo_type="model", token=token,
             commit_message="Add Piper config.json (append-only backup)",
         )
         _confirmed_remote_size(api, repo_id, remote_path, config.stat().st_size)
@@ -214,9 +289,9 @@ def sync_verified_checkpoints(
     Upload commits are confirmed with HF path and size before marking synced.
     """
     project = Path(project)
-    repo_id = (repo_id or "").strip()
-    if not repo_id:
-        raise ValueError("HF repo ID is required")
+    repo_id = select_hf_repo(repo_id)
+    token = hf_auth_token(token)
+    require_hf_auth_for_private_repo(repo_id, token)
     # This also validates explicit namespace/model names. For short names the
     # authenticated account determines the namespace without user guesswork.
     api = api or HfApi(token=token)
@@ -247,6 +322,10 @@ def sync_verified_checkpoints(
     verify = validator or _validate_in_subprocess
     stage_dir = project / ".hf_staging"
     stage_dir.mkdir(parents=True, exist_ok=True)
+    # Different Gradio processes can watch the same project simultaneously.
+    # Never share a snapshot path between processes or backup requests.
+    unique_stage_dir = Path(tempfile.mkdtemp(prefix="hf-backup-", dir=stage_dir))
+    remote_repo_checked = False
 
     for checkpoint in candidates:
         remote_path = f"{prefix}/{checkpoint.name}" if prefix else checkpoint.name
@@ -261,7 +340,7 @@ def sync_verified_checkpoints(
             if shutil.disk_usage(stage_dir).free < before[0] + 512 * 1024 * 1024:
                 raise OSError("Insufficient free disk for safe checkpoint snapshot")
 
-            snapshot = stage_dir / checkpoint.name
+            snapshot = unique_stage_dir / checkpoint.name
             try:
                 shutil.copy2(checkpoint, snapshot)
                 if stable_file(checkpoint, min_age=min_age) != before:
@@ -275,10 +354,9 @@ def sync_verified_checkpoints(
 
                 # Create the repository only after validation passes, so broken
                 # checkpoints cannot trigger publishing an invalid config.
-                api.create_repo(
-                    repo_id=repo_id, repo_type="model", private=bool(private),
-                    exist_ok=True,
-                )
+                if not remote_repo_checked:
+                    _ensure_remote_model_repo(api, repo_id, token, bool(private))
+                    remote_repo_checked = True
                 config_status = _ensure_remote_config(api, repo_id, token, config)
                 result["config_status"] = config_status
 
@@ -286,11 +364,37 @@ def sync_verified_checkpoints(
                     api, repo_id, remote_path, before[0], report["sha256"]
                 )
                 if remote_status == "missing":
-                    api.upload_file(
-                        path_or_fileobj=str(snapshot), path_in_repo=remote_path,
-                        repo_id=repo_id, repo_type="model",
-                        commit_message=f"Add verified Piper {checkpoint.name} step {report['global_step']}",
-                    )
+                    try:
+                        api.upload_file(
+                            path_or_fileobj=str(snapshot), path_in_repo=remote_path,
+                            repo_id=repo_id, repo_type="model", token=token,
+                            commit_message=f"Add verified Piper {checkpoint.name} step {report['global_step']}",
+                        )
+                    except Exception as upload_error:
+                        status_code = getattr(
+                            getattr(upload_error, "response", None), "status_code", None
+                        )
+                        # Bad permissions must be fixed by the owner; an
+                        # alternate transport cannot repair a 401/403.
+                        if status_code in (401, 403):
+                            raise PermissionError(
+                                f"HF rechazó subida de {checkpoint.name}: HTTP {status_code}. "
+                                "Revisa el token y permisos Write sobre el repo privado."
+                            ) from upload_error
+                        # The API might have committed despite losing the HTTP
+                        # response. Query the Hub AGAIN to avoid overwriting.
+                        retry_status = _remote_checkpoint_status(
+                            api, repo_id, remote_path, before[0], report["sha256"]
+                        )
+                        if retry_status == "missing":
+                            try:
+                                _cli_upload_checkpoint(repo_id, snapshot, token)
+                            except Exception as cli_error:
+                                raise RuntimeError(
+                                    f"Falló API para {checkpoint.name}: "
+                                    f"{type(upload_error).__name__}: {upload_error}. "
+                                    f"También falló CLI: {cli_error}"
+                                ) from cli_error
                     _confirmed_remote_size(api, repo_id, remote_path, before[0])
                     remote_status = _remote_checkpoint_status(
                         api, repo_id, remote_path, before[0], report["sha256"]
@@ -321,4 +425,6 @@ def sync_verified_checkpoints(
                     snapshot.unlink()
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
             result["failed"].append({"file": checkpoint.name, "reason": str(error)})
+    # Only our request's isolated staging directory can be removed.
+    shutil.rmtree(unique_stage_dir, ignore_errors=True)
     return result

@@ -19,6 +19,11 @@ class FakeHf:
         self.checkpoint_sha = {}
         self.creates = []
         self.uploads = []
+        self.repo_info_calls = []
+
+    def repo_info(self, repo_id, *, repo_type="model", token=None):
+        self.repo_info_calls.append((repo_id, repo_type, token))
+        return SimpleNamespace(id=repo_id, private=True)
 
     def create_repo(self, **kw):
         self.creates.append(kw)

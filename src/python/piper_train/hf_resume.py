@@ -22,6 +22,7 @@ from huggingface_hub import HfApi, hf_hub_download
 
 from .checkpoint_guard import CHECKPOINT_NAME
 from .hf_backup import resolve_repo_id
+from .hf_settings import hf_auth_token, select_hf_repo, require_hf_auth_for_private_repo
 
 ROOT_SELECTION = "Automático: último checkpoint válido"
 
@@ -38,9 +39,24 @@ def list_remote_versions(
     repo_name: str, token: str = "", *, api: Optional[Any] = None
 ) -> tuple[str, list[str]]:
     """Return newest first, using *global_step*, not lexicographic order."""
+    repo_name = select_hf_repo(repo_name)
+    token = hf_auth_token(token)
+    require_hf_auth_for_private_repo(repo_name, token)
     hub = api or HfApi(token=token or None)
     repo_id = resolve_repo_id(repo_name, token, api=hub)
-    files = hub.list_repo_files(repo_id=repo_id, repo_type="model")
+    try:
+        files = hub.list_repo_files(repo_id=repo_id, repo_type="model")
+    except Exception as error:
+        from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
+        if isinstance(error, (RepositoryNotFoundError, HfHubHTTPError)):
+            code = getattr(getattr(error, "response", None), "status_code", None)
+            if code in (401, 403, 404):
+                raise PermissionError(
+                    f"No se puede leer {repo_id} (HTTP {code}). Si el modelo HF "
+                    "es privado, proporciona un token con permiso Read sobre "
+                    "ese repositorio en el campo HF token o en Kaggle Secrets."
+                ) from error
+        raise
     if "config.json" not in files:
         raise ValueError(f"{repo_id} no tiene config.json en la raíz")
     versions = [p for p in files if "/" not in p and CHECKPOINT_NAME.fullmatch(p)]
@@ -153,6 +169,9 @@ def prepare_resume_from_hf(
             "el dataset original; HF guarda los checkpoints pero no el dataset."
         )
     local_config = training / "config.json"
+    repo_name = select_hf_repo(repo_name)
+    token = hf_auth_token(token)
+    require_hf_auth_for_private_repo(repo_name, token)
     hub = api or HfApi(token=token or None)
     repo_id, names = list_remote_versions(repo_name, token, api=hub)
     automatic = selected_checkpoint in ("", None, ROOT_SELECTION)

@@ -11,6 +11,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from .hf_settings import DEFAULT_HF_REPO
+
 LOCK = threading.RLock()
 DEFAULTS = {
     "source_url": "",
@@ -32,7 +34,7 @@ DEFAULTS = {
     "checkpoint_minutes": 15,
     "max_phoneme_ids": 400,
     "accelerator": "auto",
-    "hf_repo_id": "",
+    "hf_repo_id": DEFAULT_HF_REPO,
     "hf_private": True,
     "hf_sync_interval": 20,
     "hf_auto_backup": True,

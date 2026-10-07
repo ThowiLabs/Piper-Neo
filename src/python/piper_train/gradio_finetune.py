@@ -41,6 +41,9 @@ except OSError:
 
 import torch
 from huggingface_hub import HfApi
+from .hf_settings import (
+    DEFAULT_HF_REPO, hf_auth_token, select_hf_repo, require_hf_auth_for_private_repo,
+)
 
 KAGGLE_ROOT = Path(os.environ.get("PIPER_FINETUNE_ROOT", "/kaggle/working/piper_finetune"))
 DEFAULT_BASE_URL = (
@@ -596,11 +599,14 @@ def sync_to_huggingface(
     """Validate every checkpoint before pushing an original-named HF backup."""
     from .hf_backup import sync_verified_checkpoints
 
-    token = (token or os.environ.get("HF_TOKEN", "")).strip()
-    if not (repo_id or "").strip():
-        raise gr.Error("Falta el repo_id de Hugging Face.")
+    token = hf_auth_token(token)
+    repo_id = select_hf_repo(repo_id)
+    try:
+        require_hf_auth_for_private_repo(repo_id, token)
+    except ValueError as error:
+        raise gr.Error(str(error)) from error
     if not token:
-        raise gr.Error("Falta el token HF (o configura HF_TOKEN).")
+        raise gr.Error("Para respaldos HF debes proporcionar token Write o HF_TOKEN.")
 
     from .hf_watcher import _SYNC_LOCK
     with _SYNC_LOCK:
@@ -852,10 +858,8 @@ def start_training(
     if mode == "Resume de corrida":
         if resume_source == "Hugging Face: último válido":
             from .hf_resume import prepare_resume_from_hf
-            repo = (resume_hf_repo or "").strip() or (hf_repo_id or "").strip()
-            if not repo:
-                raise gr.Error("Escribe el repo HF de origen, p. ej. usuario/capibara.")
-            token = (hf_token or os.environ.get("HF_TOKEN", "")).strip()
+            repo = select_hf_repo(resume_hf_repo or hf_repo_id)
+            token = hf_auth_token(hf_token)
             try:
                 prepared = prepare_resume_from_hf(
                     project=project, repo_name=repo, token=token,
@@ -902,8 +906,8 @@ def start_training(
         command.extend(["--init-from-checkpoint", str(base)])
         init_description = f"init={base}"
 
-    token = (hf_token or os.environ.get("HF_TOKEN", "")).strip()
-    repo_id = (hf_repo_id or "").strip()
+    token = hf_auth_token(hf_token)
+    repo_id = select_hf_repo(hf_repo_id)
     if hf_auto_backup and repo_id:
         if not token:
             raise gr.Error("Activaste subida automática pero falta el token HF.")
@@ -937,14 +941,39 @@ def start_training(
     )
 
 
+def verify_hf_private_access(repo_id: str, token: str) -> str:
+    """Test read access without changing the remote model or exposing token."""
+    repo_id = select_hf_repo(repo_id)
+    token = hf_auth_token(token)
+    try:
+        require_hf_auth_for_private_repo(repo_id, token)
+        if not token:
+            raise ValueError("Introduce token HF para comprobar acceso al repositorio.")
+        api = HfApi(token=token)
+        identity = api.whoami(token=token)
+        info = api.repo_info(repo_id=repo_id, repo_type="model", token=token)
+        return (
+            f"Autenticación válida: {identity.get('name', 'usuario HF')}\n"
+            f"Repositorio MODELO accesible: {repo_id}\n"
+            f"Privado: {bool(getattr(info, 'private', False))}\n"
+            "Permiso Read: verificado. Permiso Write: solo se comprueba al "
+            "intentar subir un nuevo checkpoint; este botón NO modifica HF."
+        )
+    except Exception as error:
+        raise gr.Error(
+            f"No se pudo autenticar/leer {repo_id}. Revisa token y permisos Read "
+            f"sobre el repo privado: {type(error).__name__}: {error}"
+        ) from error
+
+
 def inspect_hf_resume(repo_name: str, backup_repo: str, token: str):
     """Show remote history and offer all version names as an override."""
     from .hf_resume import ROOT_SELECTION, list_remote_versions
 
-    auth_token = (token or os.environ.get("HF_TOKEN", "")).strip()
+    auth_token = hf_auth_token(token)
     try:
         repo_id, versions = list_remote_versions(
-            (repo_name or "").strip() or (backup_repo or "").strip(), auth_token
+            select_hf_repo(repo_name or backup_repo), auth_token
         )
     except Exception as error:
         raise gr.Error(f"No se pudo leer el repo de HF: {error}") from error
@@ -1094,7 +1123,8 @@ def activate_backup(project_name, repo_id, token, private, interval):
     from .hf_watcher import BACKUP_WATCHER
     try:
         return BACKUP_WATCHER.start(
-            _project_dir(project_name), repo_id, token, bool(private), int(interval)
+            _project_dir(project_name), select_hf_repo(repo_id), hf_auth_token(token),
+            bool(private), int(interval)
         )
     except (ValueError, OSError) as error:
         raise gr.Error(str(error)) from error
@@ -1135,6 +1165,7 @@ def load_ui_preferences(project_name=None, include_name=False):
         "Dataset, logs, checkpoints y entrenamiento siguen independientes del navegador. "
         "Por seguridad el token HF no se guarda: usa HF_TOKEN del entorno o vuelve a ingresarlo."
     )
+    prefs["hf_repo_id"] = select_hf_repo(prefs.get("hf_repo_id"))
     values = [prefs[key] for key in FIELDS]
     backup_info = backup_status()
     start_state, stop_state, train_notice = training_buttons(name)
@@ -1261,8 +1292,8 @@ def build_ui() -> gr.Blocks:
             )
             resume_hf_repo = gr.Textbox(
                 value="",
-                label="Repositorio HF de origen (vacío = usar el repo de backup)",
-                placeholder="usuario/mi-voz-piper o mi-voz-piper",
+                label="Repo de origen para Resume (opcional: vacío = repositorio HF del respaldo)",
+                placeholder=DEFAULT_HF_REPO,
             )
             with gr.Row():
                 hf_versions_btn = gr.Button("Consultar checkpoints HF")
@@ -1298,11 +1329,29 @@ def build_ui() -> gr.Blocks:
                 "original junto a config.json directamente en la raíz. "
                 "**Nunca elimina ni sobrescribe versiones anteriores en HF.** "
                 "Un registro local no prueba que el archivo remoto exista. "
-                "Puedes usar HF_TOKEN como secreto del entorno."
+                "**Repo privado:** el mismo token HF debe tener permisos Read "
+                "para consultar/descargar checkpoints y Write para respaldar. "
+                "En Kaggle Secrets configura HF_TOKEN, o ingrésalo abajo. "
+                "El token no se guarda en disco ni en preferencias."
             )
-            hf_repo_id = gr.Textbox(label="Repositorio HF (nombre o usuario/nombre)", placeholder="mi-voz-piper o usuario/mi-voz-piper")
-            hf_token = gr.Textbox(label="HF token", type="password")
+            hf_repo_id = gr.Textbox(
+                label="Repositorio HF para backup y Resume (predeterminado privado)",
+                value=DEFAULT_HF_REPO, placeholder=DEFAULT_HF_REPO,
+            )
+            hf_token = gr.Textbox(
+                label="HF token (Read para Resume, Write para backup; no se guarda)",
+                type="password",
+            )
             hf_private = gr.Checkbox(value=True, label="Repo privado")
+            check_hf_access_btn = gr.Button("Comprobar acceso privado HF (solo lectura)")
+            hf_access_report = gr.Textbox(
+                label="Autenticación HF y acceso al repositorio", lines=4,
+                interactive=False,
+            )
+            check_hf_access_btn.click(
+                verify_hf_private_access, inputs=[hf_repo_id, hf_token],
+                outputs=[hf_access_report],
+            )
             hf_versions_btn.click(
                 inspect_hf_resume,
                 inputs=[resume_hf_repo, hf_repo_id, hf_token],
@@ -1318,9 +1367,12 @@ def build_ui() -> gr.Blocks:
                 label="Respaldar automáticamente en HF cada nuevo checkpoint válido",
             )
             gr.Markdown(
-                "El respaldo puede iniciarse **aunque este entrenamiento ya esté "
-                "corriendo en otra instancia**. Subirá los checkpoints validados "
-                "sin borrar ningún archivo del repo HF."
+                "El respaldo puede iniciarse **aunque el entrenador esté corriendo**. "
+                "Pulsar **Activar respaldo HF** de nuevo con otro token actualiza "
+                "las credenciales del watcher **de este servidor**, sin tocar el "
+                "entrenamiento. Los watchers de otros Gradio son independientes. "
+                "Para reanudar desde HF elige **Resume de corrida → Hugging Face: "
+                "último válido** y pulsa **Consultar checkpoints HF** con el token."
             )
             with gr.Row():
                 enable_backup_btn = gr.Button("Activar respaldo HF independiente")

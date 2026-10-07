@@ -93,3 +93,17 @@ el error de `matplotlib_inline.backend_inline` en Kaggle.
 Estos cambios **solo se aplican a instancias que ejecuten el nuevo commit**:
 hay que hacer push de la rama y lanzar la versión actualizada; recargar
 el navegador de un servidor Gradio antiguo no actualiza su código Python.
+
+## Hugging Face privado: respaldo y reanudación
+
+Repositorio predeterminado: `HirCoir/piper-checkpoint-es-mx-capybara` (tipo **model**, privado).
+
+**Token:** El mismo campo de Gradio sirve para respaldo y recuperación. Leer y reanudar necesita permiso **Read** sobre el repositorio privado; subir checkpoints necesita **Write**. Usa `HF_TOKEN` mediante Kaggle Secrets o escribe un token en **HF token**. El token jamás se guarda en preferencias o archivos de trabajo. El botón **Comprobar acceso privado HF (solo lectura)** confirma identidad y acceso sin modificar el repositorio; no puede certificar permiso de escritura hasta intentar una subida real.
+
+**Resume:** En **3. Entrenamiento**, prepara y preprocesa primero el mismo dataset original (HF no contiene `dataset.jsonl`). Selecciona **Resume de corrida** y **Hugging Face: último válido**. El repositorio de origen puede dejarse vacío: se usa automáticamente `HirCoir/piper-checkpoint-es-mx-capybara`. Pulsa **Consultar checkpoints HF**, elige el más reciente válido y asegúrate de que `max_epochs` sea mayor que la época recuperada. La restauración conserva `global_step` y los estados de optimizadores.
+
+**Backup:** El respaldo compara el contenido remoto antes de subir y nunca elimina ni sobrescribe checkpoints antiguos. No intenta crear un repositorio privado que ya existe. Si falla la subida por API, verifica primero que el archivo no haya aparecido; si sigue faltando, intenta la CLI mediante el token en una variable de entorno (no en el comando). Los checkpoints se comprueban por tamaño y hash.
+
+**Cambio de token:** Pulsa de nuevo **Activar respaldo HF independiente** con el token vigente en **el Gradio dueño del watcher**. Si coincide el proyecto/repositorio, actualiza las credenciales en memoria sin detener el fine-tune. Otros servidores Gradio tienen watchers independientes y no se actualizan automáticamente. El secreto caduca si así fue configurado; para respaldos prolongados usa un token con permisos mínimos y vigencia suficiente.
+
+**Actualización del código:** Después de publicar los commits en GitHub, el servidor Gradio antiguo no cargará los cambios por refrescar el navegador. Inicia un nuevo proceso Gradio cuando sea seguro; evita reiniciar el kernel si el entrenamiento activo debe seguir funcionando.

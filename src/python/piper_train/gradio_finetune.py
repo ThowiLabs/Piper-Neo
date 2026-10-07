@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import ctypes
 import json
 import os
 import re
@@ -21,6 +22,15 @@ from typing import Dict, List, Optional, Tuple
 import gdown
 import gradio as gr
 import requests
+
+# Kaggle's notebook can expose /dev/nvidia* while the MCP/Gradio process does
+# not inherit the driver library search path. Preload libcuda explicitly so
+# torch.cuda.is_available() sees the same GPUs as the notebook.
+try:
+    ctypes.CDLL("/usr/local/nvidia/lib64/libcuda.so.1", mode=ctypes.RTLD_GLOBAL)
+except OSError:
+    pass
+
 import torch
 from huggingface_hub import HfApi
 

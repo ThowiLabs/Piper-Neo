@@ -6,6 +6,8 @@ PY_DIR="$ROOT_DIR/src/python"
 
 cd "$PY_DIR"
 
+export LD_LIBRARY_PATH="/usr/local/nvidia/lib64:${LD_LIBRARY_PATH:-}"
+
 if ! command -v uv >/dev/null 2>&1; then
   python -m pip install --upgrade uv
 fi

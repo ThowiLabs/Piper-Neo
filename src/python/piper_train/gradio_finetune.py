@@ -1,0 +1,951 @@
+"""Gradio web UI for resilient Piper Neo fine-tuning on Kaggle."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+import zipfile
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import gdown
+import gradio as gr
+import requests
+import torch
+from huggingface_hub import HfApi
+
+KAGGLE_ROOT = Path(os.environ.get("PIPER_FINETUNE_ROOT", "/kaggle/working/piper_finetune"))
+DEFAULT_BASE_URL = (
+    "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/"
+    "es/es_ES/davefx/medium/epoch%3D5629-step%3D1605020.ckpt"
+)
+DEFAULT_LANGUAGE = "es-419"
+DEFAULT_SAMPLE_RATE = 22050
+
+
+def _safe_project_name(name: str) -> str:
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", (name or "piper-run").strip())
+    name = name.strip(".-_")
+    return (name or "piper-run")[:80]
+
+
+def _project_dir(name: str) -> Path:
+    return KAGGLE_ROOT / _safe_project_name(name)
+
+
+def _upload_path(value) -> Optional[Path]:
+    if value is None:
+        return None
+    if isinstance(value, (str, os.PathLike)):
+        return Path(value)
+    name = getattr(value, "name", None)
+    return Path(name) if name else None
+
+
+def _log_append(path: Path, message: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{stamp}] {message}\n")
+
+
+def _safe_extract_zip(zip_path: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    root = destination.resolve()
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.infolist():
+            target = (destination / member.filename).resolve()
+            if root != target and root not in target.parents:
+                raise ValueError(f"ZIP contiene una ruta insegura: {member.filename}")
+        archive.extractall(destination)
+
+
+def _download_http(url: str, output: Path) -> Path:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=(20, 120), allow_redirects=True) as response:
+        response.raise_for_status()
+        with output.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+    return output
+
+
+def _download_source(url: str, output: Path) -> Path:
+    url = (url or "").strip()
+    if not url:
+        raise ValueError("Falta la URL.")
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    if "drive.google.com" in url:
+        result = gdown.download(url=url, output=str(output), quiet=False, fuzzy=True)
+        if not result:
+            raise RuntimeError("Google Drive no pudo descargar el archivo.")
+        return Path(result)
+
+    return _download_http(url, output)
+
+
+def _hardlink_or_copy(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        return
+    try:
+        os.link(source, destination)
+    except OSError:
+        shutil.copy2(source, destination)
+
+
+def _find_metadata(search_root: Path) -> Optional[Path]:
+    preferred = list(search_root.rglob("metadata.csv"))
+    if preferred:
+        return preferred[0]
+    candidates = [
+        p
+        for p in search_root.rglob("*")
+        if p.is_file() and p.suffix.lower() in {".csv", ".txt"}
+    ]
+    return candidates[0] if candidates else None
+
+
+def _build_wav_map(search_root: Path) -> Tuple[Dict[str, Path], List[str]]:
+    wav_map: Dict[str, Path] = {}
+    collisions: List[str] = []
+    for wav in search_root.rglob("*"):
+        if not wav.is_file() or wav.suffix.lower() != ".wav":
+            continue
+        if wav.name in wav_map and wav_map[wav.name] != wav:
+            collisions.append(wav.name)
+            continue
+        wav_map[wav.name] = wav
+    return wav_map, sorted(set(collisions))
+
+
+def _normalize_metadata(
+    metadata_source: Path,
+    wav_map: Dict[str, Path],
+    output_metadata: Path,
+    output_wav_dir: Path,
+) -> dict:
+    output_wav_dir.mkdir(parents=True, exist_ok=True)
+    output_metadata.parent.mkdir(parents=True, exist_ok=True)
+
+    total_rows = 0
+    written_rows = 0
+    invalid_rows: List[str] = []
+    missing_wavs: List[str] = []
+    duplicate_audio_rows: List[str] = []
+    seen_audio = set()
+
+    with metadata_source.open("r", encoding="utf-8-sig", newline="") as source, output_metadata.open(
+        "w", encoding="utf-8", newline=""
+    ) as destination:
+        reader = csv.reader(source, delimiter="|")
+        writer = csv.writer(destination, delimiter="|", lineterminator="\n")
+
+        for line_number, row in enumerate(reader, 1):
+            if not row or not any(cell.strip() for cell in row):
+                continue
+
+            total_rows += 1
+            if len(row) < 2:
+                invalid_rows.append(f"línea {line_number}: menos de 2 columnas")
+                continue
+
+            audio_id = row[0].strip()
+            text = row[-1].strip()
+
+            if line_number == 1 and audio_id.lower() in {"id", "file", "filename", "audio", "wav"}:
+                continue
+
+            if not audio_id or not text:
+                invalid_rows.append(f"línea {line_number}: audio o texto vacío")
+                continue
+
+            basename = Path(audio_id).name
+            if not basename.lower().endswith(".wav"):
+                basename += ".wav"
+
+            if basename in seen_audio:
+                duplicate_audio_rows.append(f"línea {line_number}: {basename}")
+                continue
+
+            wav = wav_map.get(basename)
+            if wav is None:
+                missing_wavs.append(f"línea {line_number}: {basename}")
+                continue
+
+            seen_audio.add(basename)
+            _hardlink_or_copy(wav, output_wav_dir / basename)
+            writer.writerow([basename, text])
+            written_rows += 1
+
+    return {
+        "metadata_rows": total_rows,
+        "usable_rows": written_rows,
+        "invalid_rows": invalid_rows,
+        "missing_wavs": missing_wavs,
+        "duplicate_audio_rows": duplicate_audio_rows,
+    }
+
+
+def prepare_dataset(
+    project_name: str,
+    source_url: str,
+    zip_upload,
+    metadata_upload,
+    reset_project: bool,
+) -> str:
+    project = _project_dir(project_name)
+    source_dir = project / "source"
+    input_dir = project / "input"
+    training_dir = project / "training"
+
+    if reset_project and project.exists():
+        shutil.rmtree(project)
+
+    source_dir.mkdir(parents=True, exist_ok=True)
+    input_dir.mkdir(parents=True, exist_ok=True)
+    training_dir.mkdir(parents=True, exist_ok=True)
+
+    archive = _upload_path(zip_upload)
+    if archive is None and (source_url or "").strip():
+        archive = source_dir / "dataset.zip"
+        _download_source(source_url, archive)
+
+    if archive is None:
+        raise gr.Error("Proporciona una URL de dataset o sube un ZIP.")
+    if not archive.exists():
+        raise gr.Error(f"No existe el archivo del dataset: {archive}")
+
+    extracted = source_dir / "extracted"
+    if extracted.exists():
+        shutil.rmtree(extracted)
+    extracted.mkdir(parents=True, exist_ok=True)
+
+    if zipfile.is_zipfile(archive):
+        _safe_extract_zip(archive, extracted)
+    elif archive.suffix.lower() == ".wav":
+        shutil.copy2(archive, extracted / archive.name)
+    else:
+        raise gr.Error("El dataset debe ser un ZIP.")
+
+    metadata = _upload_path(metadata_upload) or _find_metadata(extracted)
+    if metadata is None or not metadata.exists():
+        raise gr.Error(
+            "No encontré metadata.csv dentro del ZIP. Sube el CSV/metadata por separado."
+        )
+
+    wav_map, wav_collisions = _build_wav_map(extracted)
+    if not wav_map:
+        raise gr.Error("No encontré archivos WAV dentro del dataset.")
+
+    output_metadata = input_dir / "metadata.csv"
+    output_wav_dir = input_dir / "wav"
+    if output_wav_dir.exists():
+        shutil.rmtree(output_wav_dir)
+    output_wav_dir.mkdir(parents=True, exist_ok=True)
+
+    result = _normalize_metadata(metadata, wav_map, output_metadata, output_wav_dir)
+    result["wav_files_in_archive"] = len(wav_map)
+    result["wav_name_collisions"] = wav_collisions
+    result["project_dir"] = str(project)
+
+    (project / "dataset_validation.json").write_text(
+        json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    summary = [
+        f"Proyecto: {project}",
+        f"WAV únicos detectados: {len(wav_map)}",
+        f"Filas metadata leídas: {result['metadata_rows']}",
+        f"Filas utilizables: {result['usable_rows']}",
+        f"Duplicados descartados: {len(result['duplicate_audio_rows'])}",
+        f"WAV faltantes: {len(result['missing_wavs'])}",
+        f"Filas inválidas: {len(result['invalid_rows'])}",
+    ]
+    if result["duplicate_audio_rows"]:
+        summary.append(
+            "Duplicados (primeros 20): "
+            + ", ".join(result["duplicate_audio_rows"][:20])
+        )
+    if result["missing_wavs"]:
+        summary.append(
+            "Faltantes (primeros 20): " + ", ".join(result["missing_wavs"][:20])
+        )
+    if wav_collisions:
+        summary.append(
+            "Nombres WAV repetidos dentro del ZIP: " + ", ".join(wav_collisions[:20])
+        )
+
+    return "\n".join(summary)
+
+
+def _tail(path: Path, lines: int = 80) -> str:
+    if not path.exists():
+        return ""
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        data = handle.readlines()
+    return "".join(data[-lines:])
+
+
+def preprocess_dataset(
+    project_name: str,
+    language: str,
+    sample_rate: int,
+    max_workers: int,
+) -> str:
+    project = _project_dir(project_name)
+    input_dir = project / "input"
+    training_dir = project / "training"
+    log_path = project / "preprocess.log"
+
+    if not (input_dir / "metadata.csv").exists():
+        raise gr.Error("Primero prepara/valida el dataset.")
+
+    training_dir.mkdir(parents=True, exist_ok=True)
+    command = [
+        sys.executable,
+        "-m",
+        "piper_train.preprocess",
+        "--language",
+        (language or DEFAULT_LANGUAGE).strip(),
+        "--input-dir",
+        str(input_dir),
+        "--output-dir",
+        str(training_dir),
+        "--dataset-format",
+        "ljspeech",
+        "--single-speaker",
+        "--sample-rate",
+        str(int(sample_rate)),
+        "--max-workers",
+        str(max(1, int(max_workers))),
+    ]
+
+    with log_path.open("w", encoding="utf-8") as log_file:
+        process = subprocess.run(
+            command,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={**os.environ, "NUMBA_CACHE_DIR": str(project / ".numba_cache")},
+        )
+
+    tail = _tail(log_path, 100)
+    if process.returncode != 0:
+        raise gr.Error(f"Preprocess falló (código {process.returncode}).\n\n{tail}")
+
+    config = training_dir / "config.json"
+    dataset = training_dir / "dataset.jsonl"
+    if not config.exists() or not dataset.exists():
+        raise gr.Error("Preprocess terminó sin generar config.json/dataset.jsonl.")
+
+    rows = sum(1 for line in dataset.open("r", encoding="utf-8") if line.strip())
+    return (
+        f"Preprocess completado.\nIdioma: {language}\nSample rate: {sample_rate}\n"
+        f"Utterances procesadas: {rows}\nConfig: {config}\nDataset: {dataset}\n\n"
+        f"Últimas líneas del log:\n{tail}"
+    )
+
+
+def _download_checkpoint(url: str, project: Path, folder: str = "base") -> Path:
+    url = (url or "").strip()
+    if not url:
+        raise ValueError("Falta URL del checkpoint base.")
+    parsed = urllib.parse.urlparse(url)
+    basename = urllib.parse.unquote(Path(parsed.path).name)
+    if not basename or not basename.endswith(".ckpt"):
+        basename = "base.ckpt"
+    destination = project / folder / basename
+    if destination.exists() and destination.stat().st_size > 0:
+        return destination
+    return _download_source(url, destination)
+
+
+def _checkpoint_paths(project: Path) -> List[Path]:
+    training = project / "training"
+    return sorted(
+        training.glob("**/*.ckpt"),
+        key=lambda p: (p.stat().st_mtime_ns, p.name),
+    )
+
+
+def _load_sync_manifest(project: Path) -> dict:
+    path = project / ".hf_synced.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_sync_manifest(project: Path, data: dict) -> None:
+    (project / ".hf_synced.json").write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def sync_to_huggingface(
+    project_name: str,
+    repo_id: str,
+    token: str,
+    private: bool,
+    remote_prefix: str,
+) -> str:
+    project = _project_dir(project_name)
+    repo_id = (repo_id or "").strip()
+    token = (token or os.environ.get("HF_TOKEN", "")).strip()
+
+    if not repo_id:
+        raise gr.Error("Falta repo_id de Hugging Face.")
+    if not token:
+        raise gr.Error("Falta token HF. Usa el campo o la variable HF_TOKEN.")
+
+    config = project / "training" / "config.json"
+    checkpoints = _checkpoint_paths(project)
+    if not config.exists():
+        raise gr.Error("No existe training/config.json.")
+    if not checkpoints:
+        return "Todavía no hay checkpoints para sincronizar."
+
+    api = HfApi(token=token)
+    api.create_repo(
+        repo_id=repo_id,
+        repo_type="model",
+        private=bool(private),
+        exist_ok=True,
+    )
+
+    prefix = (remote_prefix or _safe_project_name(project_name)).strip("/")
+    manifest = _load_sync_manifest(project)
+    uploaded = []
+
+    config_remote = f"{prefix}/config.json" if prefix else "config.json"
+    api.upload_file(
+        path_or_fileobj=str(config),
+        path_in_repo=config_remote,
+        repo_id=repo_id,
+        repo_type="model",
+        commit_message=f"Update Piper config for {project.name}",
+    )
+
+    for checkpoint in checkpoints:
+        stat = checkpoint.stat()
+        # Avoid uploading a file while Lightning may still be writing it.
+        if (time.time() - stat.st_mtime) < 10:
+            continue
+
+        signature = f"{stat.st_size}:{stat.st_mtime_ns}"
+        key = str(checkpoint.relative_to(project))
+        if manifest.get(key) == signature:
+            continue
+
+        remote_path = (
+            f"{prefix}/checkpoints/{checkpoint.name}"
+            if prefix
+            else f"checkpoints/{checkpoint.name}"
+        )
+        api.upload_file(
+            path_or_fileobj=str(checkpoint),
+            path_in_repo=remote_path,
+            repo_id=repo_id,
+            repo_type="model",
+            commit_message=f"Backup Piper checkpoint {checkpoint.name}",
+        )
+        manifest[key] = signature
+        uploaded.append(checkpoint.name)
+        _save_sync_manifest(project, manifest)
+
+    message = (
+        f"HF sync completado: {repo_id}. Checkpoints nuevos subidos: {len(uploaded)}"
+    )
+    if uploaded:
+        message += "\n" + "\n".join(uploaded)
+    _log_append(project / "hf_sync.log", message.replace("\n", " | "))
+    return message
+
+
+class TrainingJob:
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self.process: Optional[subprocess.Popen] = None
+        self.project: Optional[Path] = None
+        self.log_path: Optional[Path] = None
+        self.log_handle = None
+        self.sync_thread: Optional[threading.Thread] = None
+        self.sync_stop = threading.Event()
+
+    def is_running(self) -> bool:
+        with self.lock:
+            return self.process is not None and self.process.poll() is None
+
+    def start(self, command: List[str], project: Path, sync_config: Optional[dict]) -> None:
+        with self.lock:
+            if self.is_running():
+                raise RuntimeError("Ya existe un entrenamiento en ejecución.")
+
+            self.project = project
+            self.log_path = project / "train.log"
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            self.log_handle = self.log_path.open("a", encoding="utf-8")
+            self.log_handle.write("\n=== START TRAINING ===\n")
+            self.log_handle.write("COMMAND: " + " ".join(command) + "\n")
+            self.log_handle.flush()
+
+            env = {
+                **os.environ,
+                "NUMBA_CACHE_DIR": str(project / ".numba_cache"),
+                "PYTHONUNBUFFERED": "1",
+            }
+            self.process = subprocess.Popen(
+                command,
+                stdout=self.log_handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=env,
+                cwd=str(project),
+            )
+
+            self.sync_stop.clear()
+            if sync_config and sync_config.get("repo_id"):
+                self.sync_thread = threading.Thread(
+                    target=self._sync_loop,
+                    args=(sync_config,),
+                    daemon=True,
+                )
+                self.sync_thread.start()
+
+    def _sync_loop(self, sync_config: dict) -> None:
+        interval = max(30, int(sync_config.get("interval", 120)))
+        while not self.sync_stop.wait(interval):
+            try:
+                sync_to_huggingface(
+                    sync_config["project_name"],
+                    sync_config["repo_id"],
+                    sync_config.get("token", ""),
+                    sync_config.get("private", True),
+                    sync_config.get("remote_prefix", ""),
+                )
+            except Exception as exc:
+                if self.project:
+                    _log_append(self.project / "hf_sync.log", f"ERROR: {exc}")
+            if not self.is_running():
+                break
+
+        try:
+            sync_to_huggingface(
+                sync_config["project_name"],
+                sync_config["repo_id"],
+                sync_config.get("token", ""),
+                sync_config.get("private", True),
+                sync_config.get("remote_prefix", ""),
+            )
+        except Exception as exc:
+            if self.project:
+                _log_append(self.project / "hf_sync.log", f"FINAL ERROR: {exc}")
+
+    def stop(self) -> str:
+        with self.lock:
+            if not self.is_running():
+                return "No hay entrenamiento activo."
+            assert self.process is not None
+            self.sync_stop.set()
+            try:
+                self.process.send_signal(signal.SIGTERM)
+                self.process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
+            code = self.process.returncode
+            if self.log_handle:
+                self.log_handle.flush()
+                self.log_handle.close()
+                self.log_handle = None
+            return f"Entrenamiento detenido. Código de salida: {code}"
+
+    def status(self) -> Tuple[str, List[str]]:
+        with self.lock:
+            process = self.process
+            project = self.project
+            log_path = self.log_path
+
+        if project is None:
+            return "Sin entrenamiento iniciado en esta sesión.", []
+
+        running = process is not None and process.poll() is None
+        code = None if running or process is None else process.returncode
+        checkpoints = _checkpoint_paths(project)
+
+        status = [
+            f"Proyecto: {project}",
+            f"Estado: {'ENTRENANDO' if running else 'DETENIDO/FINALIZADO'}",
+        ]
+        if code is not None:
+            status.append(f"Código de salida: {code}")
+        status.append(f"Checkpoints encontrados: {len(checkpoints)}")
+        if checkpoints:
+            status.append(f"Último: {checkpoints[-1]}")
+
+        log_tail = _tail(log_path, 100) if log_path else ""
+        if log_tail:
+            status.extend(["", "--- train.log ---", log_tail])
+
+        sync_log = _tail(project / "hf_sync.log", 30)
+        if sync_log:
+            status.extend(["", "--- hf_sync.log ---", sync_log])
+
+        downloads = []
+        config_path = project / "training" / "config.json"
+        if config_path.exists():
+            downloads.append(str(config_path))
+        downloads.extend(str(p) for p in checkpoints)
+        return "\n".join(status), downloads
+
+
+JOB = TrainingJob()
+
+
+def start_training(
+    project_name: str,
+    mode: str,
+    base_checkpoint_url: str,
+    base_checkpoint_upload,
+    resume_checkpoint_upload,
+    resume_checkpoint_url: str,
+    batch_size: int,
+    max_epochs: int,
+    checkpoint_epochs: int,
+    checkpoint_minutes: float,
+    max_phoneme_ids: int,
+    accelerator: str,
+    hf_repo_id: str,
+    hf_token: str,
+    hf_private: bool,
+    hf_remote_prefix: str,
+    hf_sync_interval: int,
+) -> str:
+    project = _project_dir(project_name)
+    training = project / "training"
+    if not (training / "config.json").exists() or not (training / "dataset.jsonl").exists():
+        raise gr.Error("Falta preprocess: no existen training/config.json y dataset.jsonl.")
+
+    accel = (accelerator or "auto").lower()
+    cuda = torch.cuda.is_available()
+    if accel == "gpu" and not cuda:
+        raise gr.Error("Se solicitó GPU pero torch.cuda.is_available() es False.")
+    if accel == "auto":
+        accel = "gpu" if cuda else "cpu"
+
+    command = [
+        sys.executable,
+        "-m",
+        "piper_train",
+        "--dataset-dir",
+        str(training),
+        "--quality",
+        "medium",
+        "--accelerator",
+        accel,
+        "--devices",
+        "1",
+        "--batch-size",
+        str(max(1, int(batch_size))),
+        "--validation-split",
+        "0.0",
+        "--num-test-examples",
+        "0",
+        "--max_epochs",
+        str(max(1, int(max_epochs))),
+        "--precision",
+        "32",
+        "--default_root_dir",
+        str(training),
+    ]
+
+    if float(checkpoint_minutes) > 0:
+        command.extend(["--checkpoint-minutes", str(float(checkpoint_minutes))])
+    else:
+        command.extend(["--checkpoint-epochs", str(max(1, int(checkpoint_epochs)))])
+
+    if int(max_phoneme_ids) > 0:
+        command.extend(["--max-phoneme-ids", str(int(max_phoneme_ids))])
+
+    if mode == "Resume de corrida":
+        resume = _upload_path(resume_checkpoint_upload)
+        if resume is None and (resume_checkpoint_url or "").strip():
+            resume = _download_checkpoint(
+                resume_checkpoint_url.strip(),
+                project,
+                folder="resume",
+            )
+        if resume is None:
+            checkpoints = _checkpoint_paths(project)
+            if not checkpoints:
+                raise gr.Error(
+                    "No hay checkpoint local para reanudar y no subiste/proporcionaste uno."
+                )
+            resume = checkpoints[-1]
+        command.extend(["--resume_from_checkpoint", str(resume)])
+        init_description = f"resume={resume}"
+    else:
+        uploaded = _upload_path(base_checkpoint_upload)
+        if uploaded is not None:
+            base = project / "base" / uploaded.name
+            base.parent.mkdir(parents=True, exist_ok=True)
+            if uploaded.resolve() != base.resolve():
+                shutil.copy2(uploaded, base)
+        else:
+            base = _download_checkpoint(base_checkpoint_url or DEFAULT_BASE_URL, project)
+        command.extend(["--init-from-checkpoint", str(base)])
+        init_description = f"init={base}"
+
+    token = (hf_token or os.environ.get("HF_TOKEN", "")).strip()
+    repo_id = (hf_repo_id or "").strip()
+    sync_config = None
+    if repo_id:
+        if not token:
+            raise gr.Error("Definiste un repo HF pero falta HF_TOKEN/token.")
+        sync_config = {
+            "project_name": _safe_project_name(project_name),
+            "repo_id": repo_id,
+            "token": token,
+            "private": bool(hf_private),
+            "remote_prefix": (hf_remote_prefix or "").strip(),
+            "interval": max(30, int(hf_sync_interval)),
+        }
+
+    try:
+        JOB.start(command, project, sync_config)
+    except RuntimeError as exc:
+        raise gr.Error(str(exc)) from exc
+
+    return (
+        f"Entrenamiento iniciado.\nModo: {mode} ({init_description})\n"
+        f"Accelerator: {accel} (CUDA visible={cuda})\nBatch size: {batch_size}\n"
+        f"Max epochs: {max_epochs}\n"
+        f"Checkpoint: {'cada ' + str(checkpoint_minutes) + ' min' if float(checkpoint_minutes) > 0 else 'cada ' + str(checkpoint_epochs) + ' epoch(s)'}\n"
+        f"HF sync: {'activado' if sync_config else 'desactivado'}\n"
+        f"Log: {project / 'train.log'}"
+    )
+
+
+def stop_training() -> str:
+    return JOB.stop()
+
+
+def refresh_status(project_name: str) -> Tuple[str, List[str]]:
+    project = _project_dir(project_name)
+    if JOB.project == project:
+        return JOB.status()
+
+    checkpoints = _checkpoint_paths(project) if project.exists() else []
+    status = [
+        f"Proyecto: {project}",
+        "Estado de proceso: no gestionado por esta instancia de Gradio.",
+        f"Checkpoints encontrados: {len(checkpoints)}",
+    ]
+    log = _tail(project / "train.log", 100)
+    if log:
+        status.extend(["", "--- train.log ---", log])
+    downloads = []
+    config_path = project / "training" / "config.json"
+    if config_path.exists():
+        downloads.append(str(config_path))
+    downloads.extend(str(p) for p in checkpoints)
+    return "\n".join(status), downloads
+
+
+def build_ui() -> gr.Blocks:
+    with gr.Blocks(title="Piper Neo Fine-tune — Kaggle") as demo:
+        gr.Markdown(
+            "# Piper Neo Fine-tune — Kaggle\n"
+            "Flujo reproducible para dataset → preprocess → fine-tune → checkpoints → backup HF.\n\n"
+            "**Predeterminado:** español latinoamericano es-419, 22,050 Hz, "
+            "davefx-medium como pesos base. Fine-tune y Resume son operaciones separadas."
+        )
+
+        with gr.Tab("1. Dataset"):
+            project_name = gr.Textbox(value="capibara", label="Nombre del proyecto")
+            source_url = gr.Textbox(
+                label="URL ZIP (Google Drive público o enlace directo)",
+                placeholder="https://drive.google.com/file/d/.../view",
+            )
+            zip_upload = gr.File(label="O sube el ZIP", file_types=[".zip"], type="filepath")
+            metadata_upload = gr.File(
+                label="CSV/metadata (opcional si ya viene dentro del ZIP)",
+                file_types=[".csv", ".txt"],
+                type="filepath",
+            )
+            reset_project = gr.Checkbox(
+                value=False,
+                label="Recrear el proyecto (borra el proyecto existente)",
+            )
+            prepare_btn = gr.Button("Preparar y validar dataset", variant="primary")
+            dataset_report = gr.Textbox(label="Validación", lines=12)
+            prepare_btn.click(
+                prepare_dataset,
+                inputs=[project_name, source_url, zip_upload, metadata_upload, reset_project],
+                outputs=dataset_report,
+            )
+
+        with gr.Tab("2. Preprocess"):
+            language = gr.Textbox(value=DEFAULT_LANGUAGE, label="Idioma eSpeak")
+            sample_rate = gr.Number(value=DEFAULT_SAMPLE_RATE, precision=0, label="Sample rate")
+            max_workers = gr.Number(
+                value=max(1, min(4, (os.cpu_count() or 2) - 1)),
+                precision=0,
+                label="Workers",
+            )
+            preprocess_btn = gr.Button("Preprocesar", variant="primary")
+            preprocess_report = gr.Textbox(label="Resultado", lines=16)
+            preprocess_btn.click(
+                preprocess_dataset,
+                inputs=[project_name, language, sample_rate, max_workers],
+                outputs=preprocess_report,
+            )
+
+        with gr.Tab("3. Entrenamiento"):
+            mode = gr.Radio(
+                ["Fine-tune desde modelo base", "Resume de corrida"],
+                value="Fine-tune desde modelo base",
+                label="Modo",
+            )
+            base_checkpoint_url = gr.Textbox(value=DEFAULT_BASE_URL, label="Checkpoint base URL")
+            base_checkpoint_upload = gr.File(
+                label="O sube checkpoint base (.ckpt)",
+                file_types=[".ckpt"],
+                type="filepath",
+            )
+            resume_checkpoint_upload = gr.File(
+                label="Checkpoint para Resume (opcional; usa el último local si se deja vacío)",
+                file_types=[".ckpt"],
+                type="filepath",
+            )
+            resume_checkpoint_url = gr.Textbox(
+                label="O URL directa/Drive de checkpoint para Resume",
+                placeholder="https://huggingface.co/.../epoch=...ckpt",
+            )
+            with gr.Row():
+                batch_size = gr.Number(value=16, precision=0, label="Batch size")
+                max_epochs = gr.Number(value=1000, precision=0, label="Max epochs")
+                checkpoint_epochs = gr.Number(
+                    value=5, precision=0, label="Fallback: checkpoint cada N epochs"
+                )
+                checkpoint_minutes = gr.Number(
+                    value=15,
+                    precision=1,
+                    label="Checkpoint cada N minutos (0 = usar epochs)",
+                )
+                max_phoneme_ids = gr.Number(
+                    value=400, precision=0, label="Máx. phoneme IDs (0=sin límite)"
+                )
+            accelerator = gr.Dropdown(["auto", "gpu", "cpu"], value="auto", label="Accelerator")
+
+            gr.Markdown(
+                "### Backup automático a Hugging Face\n"
+                "Opcional. Si configuras un repo, se suben checkpoints nuevos conservando "
+                "su nombre original y también config.json. Puedes usar la variable HF_TOKEN."
+            )
+            hf_repo_id = gr.Textbox(label="HF repo id", placeholder="usuario/mi-voz-piper")
+            hf_token = gr.Textbox(label="HF token", type="password")
+            hf_private = gr.Checkbox(value=True, label="Repo privado")
+            hf_remote_prefix = gr.Textbox(
+                label="Carpeta remota (vacío = nombre del proyecto)",
+                placeholder="capibara",
+            )
+            hf_sync_interval = gr.Number(
+                value=120, precision=0, label="Sincronizar cada N segundos (mín. 30)"
+            )
+
+            start_btn = gr.Button("Iniciar entrenamiento", variant="primary")
+            stop_btn = gr.Button("Detener entrenamiento", variant="stop")
+            start_report = gr.Textbox(label="Inicio/Stop", lines=10)
+            start_btn.click(
+                start_training,
+                inputs=[
+                    project_name,
+                    mode,
+                    base_checkpoint_url,
+                    base_checkpoint_upload,
+                    resume_checkpoint_upload,
+                    resume_checkpoint_url,
+                    batch_size,
+                    max_epochs,
+                    checkpoint_epochs,
+                    checkpoint_minutes,
+                    max_phoneme_ids,
+                    accelerator,
+                    hf_repo_id,
+                    hf_token,
+                    hf_private,
+                    hf_remote_prefix,
+                    hf_sync_interval,
+                ],
+                outputs=start_report,
+            )
+            stop_btn.click(stop_training, outputs=start_report)
+
+        with gr.Tab("4. Estado y checkpoints"):
+            refresh_btn = gr.Button("Actualizar estado")
+            status_box = gr.Textbox(label="Estado/log", lines=24)
+            checkpoint_files = gr.File(
+                label="Archivos de recuperación: config.json + checkpoints",
+                file_count="multiple",
+                interactive=False,
+            )
+            refresh_btn.click(
+                refresh_status,
+                inputs=[project_name],
+                outputs=[status_box, checkpoint_files],
+            )
+            sync_btn = gr.Button("Sincronizar ahora con Hugging Face")
+            sync_report = gr.Textbox(label="HF sync", lines=8)
+            sync_btn.click(
+                sync_to_huggingface,
+                inputs=[project_name, hf_repo_id, hf_token, hf_private, hf_remote_prefix],
+                outputs=sync_report,
+            )
+
+        gr.Markdown(
+            "### Recuperación\n"
+            "- Si Kaggle reinicia, vuelve a lanzar Gradio y usa Resume de corrida con "
+            "el último .ckpt local o uno descargado desde Hugging Face.\n"
+            "- Fine-tune solo carga pesos del modelo base y comienza en epoch 0.\n"
+            "- Resume restaura epoch/global step/optimizadores de tu propia corrida."
+        )
+
+    return demo
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--share", action="store_true", help="Crear URL pública temporal de Gradio")
+    parser.add_argument("--port", type=int, default=7860)
+    args = parser.parse_args()
+
+    KAGGLE_ROOT.mkdir(parents=True, exist_ok=True)
+    demo = build_ui()
+    demo.queue(default_concurrency_limit=2).launch(
+        server_name="0.0.0.0",
+        server_port=args.port,
+        share=args.share,
+        show_error=True,
+        allowed_paths=[str(KAGGLE_ROOT)],
+        max_file_size="10gb",
+    )
+
+
+if __name__ == "__main__":
+    main()

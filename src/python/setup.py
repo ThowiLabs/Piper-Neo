@@ -46,6 +46,7 @@ setup(
     entry_points={
         "console_scripts": [
             "piper-train = piper_train.__main__:main",
+            "piper-finetune-web = piper_train.gradio_finetune:main",
         ]
     },
     classifiers=[

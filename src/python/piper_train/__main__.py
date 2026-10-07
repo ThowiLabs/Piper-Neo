@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 import torch
@@ -38,6 +39,14 @@ def main():
         help="Save checkpoint every N epochs (default: 1)",
     )
     parser.add_argument(
+        "--checkpoint-minutes",
+        type=float,
+        help=(
+            "Save a checkpoint at least every N minutes of training time. "
+            "When set, this takes precedence over --checkpoint-epochs."
+        ),
+    )
+    parser.add_argument(
         "--quality",
         default="medium",
         choices=("x-low", "medium", "high"),
@@ -47,11 +56,27 @@ def main():
         "--resume_from_single_speaker_checkpoint",
         help="For multi-speaker models only. Converts a single-speaker checkpoint to multi-speaker and resumes training",
     )
+    parser.add_argument(
+        "--init-from-checkpoint",
+        help=(
+            "Initialize model weights from a checkpoint but start a NEW training run "
+            "from epoch 0 with fresh optimizer/scheduler state. Use this for fine-tuning "
+            "from a pretrained Piper checkpoint. Use Lightning's --resume_from_checkpoint "
+            "only to resume an interrupted run."
+        ),
+    )
     Trainer.add_argparse_args(parser)
     VitsModel.add_model_specific_args(parser)
     parser.add_argument("--seed", type=int, default=1234)
     args = parser.parse_args()
     _LOGGER.debug(args)
+
+    if args.init_from_checkpoint and getattr(args, "resume_from_checkpoint", None):
+        parser.error(
+            "--init-from-checkpoint and --resume_from_checkpoint are mutually exclusive. "
+            "Use --init-from-checkpoint for fine-tuning from a base model, or "
+            "--resume_from_checkpoint to continue an interrupted run."
+        )
 
     args.dataset_dir = Path(args.dataset_dir)
     if not args.default_root_dir:
@@ -71,8 +96,24 @@ def main():
         sample_rate = int(config["audio"]["sample_rate"])
 
     trainer = Trainer.from_argparse_args(args)
-    if args.checkpoint_epochs is not None:
-        trainer.callbacks = [ModelCheckpoint(every_n_epochs=args.checkpoint_epochs)]
+    if args.checkpoint_minutes is not None and args.checkpoint_minutes > 0:
+        trainer.callbacks = [
+            ModelCheckpoint(
+                train_time_interval=timedelta(minutes=args.checkpoint_minutes),
+                save_top_k=1,
+            )
+        ]
+        _LOGGER.debug(
+            "Checkpoints will be saved every %s minute(s)",
+            args.checkpoint_minutes,
+        )
+    elif args.checkpoint_epochs is not None:
+        trainer.callbacks = [
+            ModelCheckpoint(
+                every_n_epochs=args.checkpoint_epochs,
+                save_top_k=1,
+            )
+        ]
         _LOGGER.debug(
             "Checkpoints will be saved every %s epoch(s)", args.checkpoint_epochs
         )
@@ -101,6 +142,13 @@ def main():
         dataset=[dataset_path],
         **dict_args,
     )
+
+    if args.init_from_checkpoint:
+        _LOGGER.info(
+            "Initializing model weights for fine-tuning from checkpoint: %s",
+            args.init_from_checkpoint,
+        )
+        load_finetune_checkpoint(model, args.init_from_checkpoint)
 
     if args.resume_from_single_speaker_checkpoint:
         assert (
@@ -135,6 +183,92 @@ def main():
         )
 
     trainer.fit(model)
+
+
+def load_finetune_checkpoint(model, checkpoint_path):
+    """Load compatible model weights without restoring trainer state.
+
+    A Lightning checkpoint contains model parameters plus epoch/global step,
+    optimizer states, scheduler states, callbacks and loop state. Fine-tuning
+    from a pretrained Piper voice should reuse only compatible model weights;
+    restoring the full checkpoint is a resume operation.
+    """
+
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    saved_state_dict = checkpoint.get("state_dict", checkpoint)
+    if not isinstance(saved_state_dict, dict):
+        raise ValueError(f"Invalid checkpoint state_dict: {checkpoint_path}")
+
+    current_state_dict = model.state_dict()
+    compatible_state_dict = {}
+    skipped_missing = []
+    skipped_shape = []
+
+    for key, saved_value in saved_state_dict.items():
+        current_value = current_state_dict.get(key)
+        if current_value is None:
+            skipped_missing.append(key)
+            continue
+
+        if tuple(current_value.shape) != tuple(saved_value.shape):
+            skipped_shape.append(
+                (key, tuple(saved_value.shape), tuple(current_value.shape))
+            )
+            continue
+
+        compatible_state_dict[key] = saved_value
+
+    if not compatible_state_dict:
+        raise ValueError(
+            f"No compatible model weights found in checkpoint: {checkpoint_path}"
+        )
+
+    missing_after_load, unexpected_after_load = model.load_state_dict(
+        compatible_state_dict, strict=False
+    )
+
+    _LOGGER.info(
+        "Fine-tune initialization loaded %s/%s compatible tensors",
+        len(compatible_state_dict),
+        len(current_state_dict),
+    )
+
+    if skipped_shape:
+        _LOGGER.warning(
+            "Skipped %s checkpoint tensor(s) because their shapes differ",
+            len(skipped_shape),
+        )
+        for key, saved_shape, current_shape in skipped_shape[:20]:
+            _LOGGER.warning(
+                "Shape mismatch for %s: checkpoint=%s current=%s",
+                key,
+                saved_shape,
+                current_shape,
+            )
+
+    if skipped_missing:
+        _LOGGER.debug(
+            "Ignored %s checkpoint tensor(s) not present in the current model",
+            len(skipped_missing),
+        )
+
+    if unexpected_after_load:
+        _LOGGER.debug("Unexpected keys after load: %s", unexpected_after_load)
+
+    if missing_after_load:
+        _LOGGER.info(
+            "Kept %s current tensor(s) freshly initialized",
+            len(missing_after_load),
+        )
+
+    return {
+        "loaded": len(compatible_state_dict),
+        "total_current": len(current_state_dict),
+        "skipped_shape": skipped_shape,
+        "skipped_missing": skipped_missing,
+        "checkpoint_epoch": checkpoint.get("epoch"),
+        "checkpoint_global_step": checkpoint.get("global_step"),
+    }
 
 
 def load_state_dict(model, saved_state_dict):

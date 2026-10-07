@@ -171,10 +171,14 @@ python3 -m piper_train \
     --validation-split 0.0 \
     --num-test-examples 0 \
     --max_epochs 10000 \
-    --resume_from_checkpoint /path/to/lessac/epoch=2164-step=1355540.ckpt \
+    --init-from-checkpoint /path/to/lessac/epoch=2164-step=1355540.ckpt \
     --checkpoint-epochs 1 \
     --precision 32
 ```
+
+Use `--init-from-checkpoint` when fine-tuning from a pretrained/base voice. It loads compatible model weights only and starts a new run at epoch 0 with fresh optimizer and scheduler state.
+
+Use Lightning's `--resume_from_checkpoint` only when continuing an interrupted training run that belongs to the same experiment. Resume restores epoch, global step, optimizer, scheduler, callback, and loop state.
 
 Use `--quality high` to train a [larger voice model](https://github.com/rhasspy/piper/blob/master/src/python/piper_train/vits/config.py#L45) (sounds better, but is much slower).
 

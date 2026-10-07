@@ -1,81 +1,71 @@
-# Piper-Neo Studio · Transferir Git + probar en un nuevo notebook
+# Piper-Neo Studio · Kaggle desde el repositorio oficial
 
-## Contenido del paquete ZIP
+## Único origen de código
 
-`Piper-Neo-Studio-GIT.zip` incluye:
-- Proyecto con código fuente y todos los archivos actualmente versionados.
-- Carpeta oculta **`.git/` con historial y ramas**:
-  - `feature/resilient-finetune-studio` (rama que contiene el Studio completo).
-  - `main` (punto de partida).
-- Cuaderno `notebooks/KAGGLE_IMPORT_PIPER_NEO_STUDIO.ipynb` para un Kaggle nuevo.
-- Validación de checkpoints, respaldo incremental orientado al repo HF (sin borrar versiones),
-  recuperación desde HF, inferencia y exportación ONNX.
-- Dependencias fijadas y script `script/setup_kaggle_finetune.sh`.
+Repositorio: **https://github.com/ThowiLabs/Piper-Neo**
 
-**No incluye** `.venv` (más de 4 GB), ningún dataset, CSV con transcripciones,
-checkpoint/ONNX/WAV, token HF, cachés ni archivos de salida de entrenamiento.
-No se incluyen ejecutables precompilados portables: los scripts experimentales de empaquetado
-no constituyen una build terminada ni validada en hardware diferente.
+Rama con Studio, HF Resume y respaldos incrementales:
+`feature/resilient-finetune-studio`
 
-## Subir un repositorio nuevo a GitHub CONSERVANDO commits
+Notebook oficial de la rama:
+`notebooks/KAGGLE_IMPORT_PIPER_NEO_STUDIO.ipynb`
 
-**IMPORTANTE:** subir el ZIP directamente con «Upload files» de GitHub crea un
-archivo .zip en el repositorio, **NO** reconstruye la historia de commits.
-Para conservar la historia hay que utilizar Git en una terminal.
+El notebook **NO pregunta** repositorio, no solicita ZIP y no permite elegir
+entre GitHub/ZIP. Clona directamente la rama de Studio del proyecto original.
 
-1. Crea un repositorio **VACÍO** en GitHub sin README, .gitignore ni licencia.
-2. Extrae el ZIP en tu computadora (verifica que `Piper-Neo/.git/` exista; en
-   Windows hay que permitir archivos ocultos).
-3. Abre una terminal en el directorio extraído y ejecuta:
+## Ejecutar en Kaggle
+
+1. Importa `notebooks/KAGGLE_IMPORT_PIPER_NEO_STUDIO.ipynb` en un Kaggle nuevo.
+2. En Settings activa GPU NVIDIA (p. ej., Tesla T4) e Internet.
+3. Ejecuta las celdas en orden. Se clonará
+   `https://github.com/ThowiLabs/Piper-Neo.git` en
+   `/kaggle/working/Piper-Neo`, rama `feature/resilient-finetune-studio`.
+4. El script de instalación fija Python 3.10 y dependencias del fine-tune.
+   **El paquete portable precompilado todavía no está terminado**.
+5. Se verifican GPU/CUDA y las pruebas de HF backup/resume/inferencia.
+6. Opcional: configura Kaggle Secrets `HF_TOKEN`, `PIPER_STUDIO_AUTH_USER`
+   y `PIPER_STUDIO_AUTH_PASSWORD`. Nunca pegues el token en código público.
+7. Abre Gradio desde la última celda de arranque y usa las cinco pestañas:
+   Dataset, Preprocess, Entrenamiento, Estado y checkpoints e Inferencia.
+
+## Cuaderno antiguo retirado
+
+Se eliminó de la rama de Studio `notebooks/kaggle_finetune_gradio.ipynb`.
+Ya no forma parte del árbol de archivos de esa rama.
+
+**Importante sobre Git:** un commit de eliminación retira el archivo del árbol
+actual después de hacer push. No borra por la fuerza los commits históricos
+que lo añadieron o modificaron. Reescribir commits remotos publicados podría
+romper el historial de otros usuarios; no es necesario para retirar el cuaderno.
+
+Para publicar la corrección a la rama existente:
 
 ```bash
-cd Piper-Neo
-git branch -avv
-git log -3 --oneline
-git remote set-url origin https://github.com/TU_USUARIO/Piper-Neo.git
-git push -u origin feature/resilient-finetune-studio
-git push origin main
+git switch feature/resilient-finetune-studio
+git push origin feature/resilient-finetune-studio
 ```
 
-Si prefieres que la versión nueva sea el `main` del nuevo repositorio, se puede
-configurar su rama por defecto en GitHub, o integrar la rama feature después de
-revisar los cambios. El notebook de esta entrega clona explícitamente la rama
-`feature/resilient-finetune-studio`.
+No se requiere `git push --force`. Si se desea llevar el Studio a `main`,
+revísalo primero en un Pull Request hacia la rama principal.
 
-**Nota de permisos:** el Git author de los commits existentes es `YahirHub`; su
-identidad no da credenciales para pushear al GitHub de otra persona. Para hacer
-push tendrás que autenticarte en tu propia cuenta.
+## ZIP de respaldo Git
 
-## Probar en Kaggle
+También se entrega un ZIP del árbol actual con toda su carpeta `.git` y
+commits para respaldar el trabajo. **El notebook no lo utiliza**: siempre
+clona el repositorio oficial.
 
-1. Kaggle → `New Notebook`, importar
-   `notebooks/KAGGLE_IMPORT_PIPER_NEO_STUDIO.ipynb`.
-2. Settings → activar **GPU** (Tesla T4 u otra compatible) e **Internet ON**.
-3. Ejecuta la primera celda; elige `SOURCE = "GitHub"` y pon la URL de tu
-   repositorio, o `SOURCE = "ZIP"` y la ruta del ZIP que adjuntaste vía Add Input.
-4. Ejecuta la importación y confirma que `git log` incluye `f7b4358`
-   y los commits posteriores.
-5. Ejecuta setup (descarga Python 3.10 + dependencias). Necesita Internet y espacio
-   libre suficiente. La build portable aún está pendiente; por ahora el setup
-   instala dependencias fijadas y compila los módulos necesarios.
-6. Ejecuta la comprobación CUDA y las pruebas. Comprueba las GPU visibles.
-7. Opcional: en Add-ons/Secrets, configura `HF_TOKEN` y/o
-   `PIPER_STUDIO_AUTH_USER` + `PIPER_STUDIO_AUTH_PASSWORD`.
-8. Lanza Gradio; la celda mostrará una URL `*.gradio.live`.
-9. En la pestaña 1 prepara WAV/ZIP y CSV, en la 2 preprocesa en `es-419`,
-   en la 3 entrena o reanuda desde HF, en la 4 respalda checkpoints nuevos y en
-   la 5 prueba la inferencia.
+El ZIP no incluye entorno virtual `.venv`, pesos `.ckpt`, datasets, audio
+entrenado, secretos ni cachés. Estos recursos se descargan o crean en Kaggle.
+El estado de entrenamientos anteriores no se recupera únicamente clonando Git;
+para continuar desde HF también es necesario preparar el dataset original.
 
-## Seguridad y persistencia
+## Verificación y seguridad
 
-- No publiques tokens de Hugging Face en una URL pública de Gradio sin contraseña.
-  Prefiere Secrets de Kaggle y permisos mínimos.
-- El backup es **incremental y append-only**: compara contra archivos remotos,
-  sin borrar ni sobrescribir checkpoints anteriores.
-- Se necesita el dataset preprocesado original para usar Resume desde un checkpoint
-  de HF. Los checkpoints no contienen todo el dataset.
-- Si Kaggle se reinicia, los archivos en `/kaggle/working` podrían perderse.
-  Haz respaldo de los checkpoints en HF. El enlace temporal de Gradio no es hosting
-  permanente.
-- La rama del paquete no se subió a GitHub por parte del asistente; está
-  incluida íntegramente en este ZIP para que puedas crear tu propio remoto.
+- Los respaldos HF comprueban archivos existentes en el repo remoto antes de
+  subir otros nuevos y conservan versiones anteriores sin borrarlas.
+- Para reanudar, se utiliza el último checkpoint válido por `global_step`
+  y `--resume_from_checkpoint` con optimizadores/época.
+- Los checkpoints Lightning usan pickle y **solo deben recuperarse de fuentes
+  confiables**.
+- Un enlace Gradio público sin credenciales no es privado; recomendamos activar
+  autenticación antes de administrar datos o HF desde el navegador.

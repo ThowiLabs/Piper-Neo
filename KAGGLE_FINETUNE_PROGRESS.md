@@ -259,3 +259,20 @@ Validación:
 - utterances: 3999
 - rutas de audio/cache verificadas en muestras distribuidas: OK
 - checkpoint base: epoch=5629-step=1605020.ckpt
+
+
+## Git y servidor final
+
+Commits realizados con el autor persistente del repositorio:
+- dac2511eb86ad61c18e32f627baa40e72da776a9 — Fix fine-tune and add resilient Kaggle Gradio service
+- b2b8076130be530fa558b19ae3122ec85ae543e6 — Pin Kaggle fine-tune notebook to validated revision
+
+Identidad Git local persistente:
+- YahirHub <291061271+ThowiLabs@users.noreply.github.com>
+
+El notebook está fijado al commit funcional dac2511eb86ad61c18e32f627baa40e72da776a9, por lo que su bootstrap no depende de cambios futuros en main.
+
+Validación de servidor:
+- servidor local: OK / HTTP 200
+- túnel público Gradio: OK
+- Gradio informa que los enlaces share gratuitos expiran después de 72 horas; el cuaderno puede recrear el túnel al reiniciarse.

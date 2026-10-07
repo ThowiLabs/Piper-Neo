@@ -508,6 +508,10 @@ class TrainingJob:
                 **os.environ,
                 "NUMBA_CACHE_DIR": str(project / ".numba_cache"),
                 "PYTHONUNBUFFERED": "1",
+                "LD_LIBRARY_PATH": (
+                    "/usr/local/nvidia/lib64:"
+                    + os.environ.get("LD_LIBRARY_PATH", "")
+                ).rstrip(":"),
             }
             self.process = subprocess.Popen(
                 command,

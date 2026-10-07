@@ -189,7 +189,7 @@ Comando web instalado:
 Creado:
 `notebooks/kaggle_finetune_gradio.ipynb`
 
-El notebook quedó fijado al commit validado `dac2511eb86ad61c18e32f627baa40e72da776a9` para que el bootstrap no dependa de cambios futuros en `main`.
+El notebook quedó fijado al commit validado `05316482e50ce23d1a350979f46a4e741df4af37` para que el bootstrap no dependa de cambios futuros en `main`.
 
 
 ## Validación real de fine-tune
@@ -270,9 +270,11 @@ Commits realizados con el autor persistente del repositorio:
 Identidad Git local persistente:
 - YahirHub <291061271+ThowiLabs@users.noreply.github.com>
 
-El notebook está fijado al commit funcional dac2511eb86ad61c18e32f627baa40e72da776a9, por lo que su bootstrap no depende de cambios futuros en main.
+El notebook está fijado al commit funcional 05316482e50ce23d1a350979f46a4e741df4af37, por lo que su bootstrap no depende de cambios futuros en main.
 
 Validación de servidor:
 - servidor local: OK / HTTP 200
 - túnel público Gradio: OK
 - Gradio informa que los enlaces share gratuitos expiran después de 72 horas; el cuaderno puede recrear el túnel al reiniciarse.
+
+- `05316482e50ce23d1a350979f46a4e741df4af37` — Ensure Kaggle NVIDIA libraries for fine-tune jobs

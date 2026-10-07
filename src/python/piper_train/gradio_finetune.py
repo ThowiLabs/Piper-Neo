@@ -53,6 +53,50 @@ def _project_dir(name: str) -> Path:
     return KAGGLE_ROOT / _safe_project_name(name)
 
 
+def _other_training_pids(project: Path) -> list[int]:
+    """Find existing Piper trainers across independently started Gradio servers."""
+    dataset_dir = str((Path(project) / "training").resolve())
+    current_pid = os.getpid()
+    found = []
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return found
+    for entry in proc.iterdir():
+        if not entry.name.isdecimal():
+            continue
+        pid = int(entry.name)
+        if pid == current_pid:
+            continue
+        try:
+            argv = (entry / "cmdline").read_bytes().split(b"\x00")
+            args = [item.decode("utf-8", "replace") for item in argv if item]
+        except (OSError, PermissionError):
+            continue
+        if not ("-m" in args and "piper_train" in args):
+            continue
+        if "--dataset-dir" not in args:
+            continue
+        index = args.index("--dataset-dir")
+        if index + 1 < len(args):
+            try:
+                candidate = str(Path(args[index + 1]).resolve())
+            except (OSError, ValueError):
+                continue
+            if candidate == dataset_dir:
+                found.append(pid)
+    return sorted(found)
+
+
+def _assert_no_external_training(project: Path) -> None:
+    running = _other_training_pids(project)
+    if running:
+        raise gr.Error(
+            f"Hay entrenamiento activo para este proyecto (PID {', '.join(map(str, running))}). "
+            "No se permite preparar, preprocesar, borrar ni iniciar otro entrenamiento "
+            "sobre el mismo dataset hasta que termine."
+        )
+
+
 def _upload_path(value) -> Optional[Path]:
     if value is None:
         return None
@@ -217,6 +261,9 @@ def prepare_dataset(
     reset_project: bool,
 ) -> str:
     project = _project_dir(project_name)
+    _assert_no_external_training(project)
+    if JOB.is_running() and JOB.project == project:
+        raise gr.Error("No se puede reemplazar el dataset durante el entrenamiento.")
     source_dir = project / "source"
     input_dir = project / "input"
     training_dir = project / "training"
@@ -316,6 +363,9 @@ def preprocess_dataset(
     max_workers: int,
 ) -> str:
     project = _project_dir(project_name)
+    _assert_no_external_training(project)
+    if JOB.is_running() and JOB.project == project:
+        raise gr.Error("No se puede preprocesar durante el entrenamiento.")
     input_dir = project / "input"
     training_dir = project / "training"
     log_path = project / "preprocess.log"
@@ -414,78 +464,36 @@ def sync_to_huggingface(
     private: bool,
     remote_prefix: str,
 ) -> str:
-    project = _project_dir(project_name)
-    repo_id = (repo_id or "").strip()
+    """Validate every checkpoint before pushing an original-named HF backup."""
+    from .hf_backup import sync_verified_checkpoints
+
     token = (token or os.environ.get("HF_TOKEN", "")).strip()
-
-    if not repo_id:
-        raise gr.Error("Falta repo_id de Hugging Face.")
+    if not (repo_id or "").strip():
+        raise gr.Error("Falta el repo_id de Hugging Face.")
     if not token:
-        raise gr.Error("Falta token HF. Usa el campo o la variable HF_TOKEN.")
+        raise gr.Error("Falta el token HF (o configura HF_TOKEN).")
 
-    config = project / "training" / "config.json"
-    checkpoints = _checkpoint_paths(project)
-    if not config.exists():
-        raise gr.Error("No existe training/config.json.")
-    if not checkpoints:
-        return "Todavía no hay checkpoints para sincronizar."
-
-    api = HfApi(token=token)
-    api.create_repo(
-        repo_id=repo_id,
-        repo_type="model",
-        private=bool(private),
-        exist_ok=True,
-    )
-
-    prefix = (remote_prefix or _safe_project_name(project_name)).strip("/")
-    manifest = _load_sync_manifest(project)
-    uploaded = []
-
-    config_remote = f"{prefix}/config.json" if prefix else "config.json"
-    api.upload_file(
-        path_or_fileobj=str(config),
-        path_in_repo=config_remote,
-        repo_id=repo_id,
-        repo_type="model",
-        commit_message=f"Update Piper config for {project.name}",
-    )
-
-    for checkpoint in checkpoints:
-        stat = checkpoint.stat()
-        # Avoid uploading a file while Lightning may still be writing it.
-        if (time.time() - stat.st_mtime) < 10:
-            continue
-
-        signature = f"{stat.st_size}:{stat.st_mtime_ns}"
-        key = str(checkpoint.relative_to(project))
-        if manifest.get(key) == signature:
-            continue
-
-        remote_path = (
-            f"{prefix}/checkpoints/{checkpoint.name}"
-            if prefix
-            else f"checkpoints/{checkpoint.name}"
-        )
-        api.upload_file(
-            path_or_fileobj=str(checkpoint),
-            path_in_repo=remote_path,
+    from .hf_watcher import _SYNC_LOCK
+    with _SYNC_LOCK:
+        report = sync_verified_checkpoints(
+            _project_dir(project_name),
             repo_id=repo_id,
-            repo_type="model",
-            commit_message=f"Backup Piper checkpoint {checkpoint.name}",
+            token=token,
+            private=bool(private),
+            remote_prefix="",
         )
-        manifest[key] = signature
-        uploaded.append(checkpoint.name)
-        _save_sync_manifest(project, manifest)
-
     message = (
-        f"HF sync completado: {repo_id}. Checkpoints nuevos subidos: {len(uploaded)}"
+        f"Repo HF: {repo_id}\n"
+        f"Checkpoints verificados y subidos: {len(report['uploaded'])}\n"
+        f"Ya sincronizados/omitidos: {len(report['skipped'])}\n"
+        f"Rechazados o no subidos: {len(report['failed'])}"
     )
-    if uploaded:
-        message += "\n" + "\n".join(uploaded)
-    _log_append(project / "hf_sync.log", message.replace("\n", " | "))
+    if report["uploaded"]:
+        message += "\nSubidos: " + ", ".join(report["uploaded"])
+    for error in report["failed"]:
+        message += f"\nNO SUBIDO {error['file']}: {error['reason']}"
+    _log_append(_project_dir(project_name) / "hf_sync.log", message.replace("\n", " | "))
     return message
-
 
 class TrainingJob:
     def __init__(self) -> None:
@@ -505,6 +513,12 @@ class TrainingJob:
         with self.lock:
             if self.is_running():
                 raise RuntimeError("Ya existe un entrenamiento en ejecución.")
+            other_pids = _other_training_pids(project)
+            if other_pids:
+                raise RuntimeError(
+                    f"El proyecto ya está entrenando en PID(s) {other_pids}. "
+                    "Para evitar daños, no se inicia otra instancia."
+                )
 
             self.project = project
             self.log_path = project / "train.log"
@@ -651,6 +665,7 @@ def start_training(
     hf_sync_interval: int,
 ) -> str:
     project = _project_dir(project_name)
+    _assert_no_external_training(project)
     training = project / "training"
     if not (training / "config.json").exists() or not (training / "dataset.jsonl").exists():
         raise gr.Error("Falta preprocess: no existen training/config.json y dataset.jsonl.")
@@ -767,7 +782,12 @@ def refresh_status(project_name: str) -> Tuple[str, List[str]]:
     checkpoints = _checkpoint_paths(project) if project.exists() else []
     status = [
         f"Proyecto: {project}",
-        "Estado de proceso: no gestionado por esta instancia de Gradio.",
+        (
+            "Entrenamiento activo en otro Gradio: PID(s) "
+            + ", ".join(map(str, _other_training_pids(project)))
+            if _other_training_pids(project)
+            else "Sin entrenamiento gestionado por esta instancia de Gradio."
+        ),
         f"Checkpoints encontrados: {len(checkpoints)}",
     ]
     log = _tail(project / "train.log", 100)
@@ -781,6 +801,98 @@ def refresh_status(project_name: str) -> Tuple[str, List[str]]:
     return "\n".join(status), downloads
 
 
+def inference_choices(project_name: str):
+    from .inference_lab import find_checkpoints
+    project = _project_dir(project_name)
+    choices = [str(p) for p in find_checkpoints(project)]
+    return gr.update(choices=choices, value=choices[0] if choices else None)
+
+
+def gradio_synthesize(
+    project_name, checkpoint_path, checkpoint_upload, config_upload,
+    text, language, length_scale, noise_scale, noise_w,
+):
+    from .inference_lab import synthesize
+    try:
+        return synthesize(
+            _project_dir(project_name), checkpoint_path, checkpoint_upload,
+            config_upload, text, language, length_scale, noise_scale, noise_w
+        )
+    except Exception as error:
+        raise gr.Error(f"No se pudo generar voz: {error}") from error
+
+
+def gradio_export_onnx(
+    project_name, checkpoint_path, checkpoint_upload, config_upload,
+):
+    from .inference_lab import export_onnx
+    try:
+        return export_onnx(
+            _project_dir(project_name), checkpoint_path, checkpoint_upload,
+            config_upload,
+        )
+    except Exception as error:
+        raise gr.Error(f"No se pudo exportar ONNX: {error}") from error
+
+
+def activate_backup(project_name, repo_id, token, private, interval):
+    from .hf_watcher import BACKUP_WATCHER
+    try:
+        return BACKUP_WATCHER.start(
+            _project_dir(project_name), repo_id, token, bool(private), int(interval)
+        )
+    except (ValueError, OSError) as error:
+        raise gr.Error(str(error)) from error
+
+
+def backup_status():
+    from .hf_watcher import BACKUP_WATCHER
+    return BACKUP_WATCHER.status()
+
+
+def disable_backup():
+    from .hf_watcher import BACKUP_WATCHER
+    return BACKUP_WATCHER.stop()
+
+
+def save_ui_preferences(project_name: str, *values) -> str:
+    """Persist user-adjusted controls, but NEVER passwords/uploads."""
+    from .studio_state import FIELDS, save_preferences
+
+    prefs = dict(zip(FIELDS, values))
+    save_preferences(KAGGLE_ROOT, _safe_project_name(project_name), prefs)
+    return f"Preferencias guardadas para {_safe_project_name(project_name)}. El token HF nunca se guarda."
+
+
+def load_ui_preferences(project_name=None, include_name=False):
+    """Recover preferences and project artifacts after refresh/reconnect."""
+    from .studio_state import FIELDS, load_preferences, save_preferences
+
+    name, prefs = load_preferences(
+        KAGGLE_ROOT, _safe_project_name(project_name) if project_name else None
+    )
+    if project_name:
+        save_preferences(KAGGLE_ROOT, name, {})
+    current_status, current_files = refresh_status(name)
+    checkpoint_choice = inference_choices(name)
+    summary = (
+        f"Proyecto restaurado: {name}. Configuración guardada en disco. "
+        "Dataset, logs, checkpoints y entrenamiento siguen independientes del navegador. "
+        "Por seguridad el token HF no se guarda: usa HF_TOKEN del entorno o vuelve a ingresarlo."
+    )
+    values = [prefs[key] for key in FIELDS]
+    backup_info = backup_status()
+    if include_name:
+        return (
+            name, *values, current_status, current_files,
+            checkpoint_choice, summary, backup_info,
+        )
+    return (
+        *values, current_status, current_files,
+        checkpoint_choice, summary, backup_info,
+    )
+
+
 def build_ui() -> gr.Blocks:
     with gr.Blocks(title="Piper Neo Fine-tune — Kaggle") as demo:
         gr.Markdown(
@@ -792,6 +904,10 @@ def build_ui() -> gr.Blocks:
 
         with gr.Tab("1. Dataset"):
             project_name = gr.Textbox(value="capibara", label="Nombre del proyecto")
+            preferences_status = gr.Textbox(
+                label="Estado recuperado al recargar",
+                interactive=False, lines=3,
+            )
             source_url = gr.Textbox(
                 label="URL ZIP (Google Drive público o enlace directo)",
                 placeholder="https://drive.google.com/file/d/.../view",
@@ -869,19 +985,39 @@ def build_ui() -> gr.Blocks:
 
             gr.Markdown(
                 "### Backup automático a Hugging Face\n"
-                "Opcional. Si configuras un repo, se suben checkpoints nuevos conservando "
-                "su nombre original y también config.json. Puedes usar la variable HF_TOKEN."
+                "Opcional. Cada checkpoint válido se sube DIRECTAMENTE a la raíz "
+                "del repositorio HF, con su nombre original, junto a config.json. "
+                "No se eliminan ni modifican checkpoints anteriores en HF. "
+                "Puedes usar la variable HF_TOKEN."
             )
             hf_repo_id = gr.Textbox(label="HF repo id", placeholder="usuario/mi-voz-piper")
             hf_token = gr.Textbox(label="HF token", type="password")
             hf_private = gr.Checkbox(value=True, label="Repo privado")
-            hf_remote_prefix = gr.Textbox(
-                label="Carpeta remota (vacío = nombre del proyecto)",
-                placeholder="capibara",
-            )
+            # Fixed root-level HF layout: .ckpt files + config.json, never folders.
+            hf_remote_prefix = gr.State("")
             hf_sync_interval = gr.Number(
                 value=120, precision=0, label="Sincronizar cada N segundos (mín. 30)"
             )
+            gr.Markdown(
+                "El respaldo puede iniciarse **aunque este entrenamiento ya esté "
+                "corriendo en otra instancia**. Subirá los checkpoints validados "
+                "sin borrar ningún archivo del repo HF."
+            )
+            with gr.Row():
+                enable_backup_btn = gr.Button("Activar respaldo HF independiente")
+                disable_backup_btn = gr.Button("Detener solo respaldo HF")
+                check_backup_btn = gr.Button("Estado del respaldo")
+            backup_report = gr.Textbox(
+                label="Backup automático (sobrevive al refresco de esta página)",
+                lines=3, interactive=False,
+            )
+            enable_backup_btn.click(
+                activate_backup,
+                inputs=[project_name, hf_repo_id, hf_token, hf_private, hf_sync_interval],
+                outputs=[backup_report],
+            )
+            disable_backup_btn.click(disable_backup, outputs=[backup_report])
+            check_backup_btn.click(backup_status, outputs=[backup_report])
 
             start_btn = gr.Button("Iniciar entrenamiento", variant="primary")
             stop_btn = gr.Button("Detener entrenamiento", variant="stop")
@@ -932,6 +1068,67 @@ def build_ui() -> gr.Blocks:
                 outputs=sync_report,
             )
 
+        with gr.Tab("5. Inferencia y exportación ONNX"):
+            gr.Markdown(
+                "Prueba los checkpoints sin detener el entrenamiento. "
+                "La inferencia usa CPU para no ocupar VRAM mientras entrenas. "
+                "**Solo abre checkpoints de confianza:** el formato Lightning usa pickle."
+            )
+            refresh_infer = gr.Button("Buscar checkpoints del proyecto")
+            inference_checkpoint = gr.Dropdown(
+                choices=[], label="Checkpoint local para escuchar",
+                allow_custom_value=False,
+            )
+            refresh_infer.click(
+                inference_choices, inputs=[project_name], outputs=[inference_checkpoint]
+            )
+            infer_uploaded = gr.File(
+                label="O sube un checkpoint .ckpt", file_types=[".ckpt"],
+                type="filepath",
+            )
+            infer_config_uploaded = gr.File(
+                label="O sube config.json (opcional si el proyecto ya tiene uno)",
+                file_types=[".json"], type="filepath",
+            )
+            infer_text = gr.Textbox(
+                label="Texto para pronunciar", lines=4,
+                value="Hola, esta es una prueba de voz en español de México.",
+                max_lines=8,
+            )
+            infer_language = gr.Textbox(value="es-419", label="Idioma de fonemización")
+            with gr.Row():
+                length_scale = gr.Slider(0.5, 2.0, value=1.0, step=0.05, label="Duración / velocidad")
+                noise_scale = gr.Slider(0.1, 1.0, value=0.667, step=0.01, label="Variabilidad")
+                noise_w = gr.Slider(0.1, 1.0, value=0.8, step=0.01, label="Variabilidad duración")
+            btn_infer = gr.Button("Generar y escuchar voz", variant="primary")
+            infer_audio = gr.Audio(label="Audio generado", type="filepath", interactive=False)
+            infer_wav_file = gr.File(label="Descargar WAV", interactive=False)
+            infer_report = gr.Textbox(label="Resultado", lines=5)
+            btn_infer.click(
+                gradio_synthesize,
+                inputs=[
+                    project_name, inference_checkpoint, infer_uploaded,
+                    infer_config_uploaded, infer_text, infer_language,
+                    length_scale, noise_scale, noise_w,
+                ],
+                outputs=[infer_audio, infer_wav_file, infer_report],
+            )
+            gr.Markdown("### Exportar a Piper ONNX")
+            export_btn = gr.Button("Exportar ONNX + config y comprobar inferencia")
+            export_files = gr.File(
+                label="Descargas ONNX y config.json", file_count="multiple",
+                interactive=False,
+            )
+            export_report = gr.Textbox(label="Exportación", lines=6)
+            export_btn.click(
+                gradio_export_onnx,
+                inputs=[
+                    project_name, inference_checkpoint,
+                    infer_uploaded, infer_config_uploaded,
+                ],
+                outputs=[export_files, export_report],
+            )
+
         gr.Markdown(
             "### Recuperación\n"
             "- Si Kaggle reinicia, vuelve a lanzar Gradio y usa Resume de corrida con "
@@ -939,6 +1136,56 @@ def build_ui() -> gr.Blocks:
             "- Fine-tune solo carga pesos del modelo base y comienza en epoch 0.\n"
             "- Resume restaura epoch/global step/optimizadores de tu propia corrida."
         )
+
+        # Client-side refresh does not reset the trainer: settings and completed
+        # artifacts are restored from disk, not gr.State or browser storage.
+        from .studio_state import FIELDS
+        persisted_controls = {
+            "source_url": source_url,
+            "language": language,
+            "sample_rate": sample_rate,
+            "max_workers": max_workers,
+            "mode": mode,
+            "base_checkpoint_url": base_checkpoint_url,
+            "resume_checkpoint_url": resume_checkpoint_url,
+            "batch_size": batch_size,
+            "max_epochs": max_epochs,
+            "checkpoint_epochs": checkpoint_epochs,
+            "checkpoint_minutes": checkpoint_minutes,
+            "max_phoneme_ids": max_phoneme_ids,
+            "accelerator": accelerator,
+            "hf_repo_id": hf_repo_id,
+            "hf_private": hf_private,
+            "hf_sync_interval": hf_sync_interval,
+            "inference_text": infer_text,
+            "inference_language": infer_language,
+            "length_scale": length_scale,
+            "noise_scale": noise_scale,
+            "noise_w": noise_w,
+        }
+        controls = [persisted_controls[field] for field in FIELDS]
+        assert len(controls) == len(FIELDS)
+        outputs = controls + [
+            status_box, checkpoint_files, inference_checkpoint,
+            preferences_status, backup_report,
+        ]
+        demo.load(
+            lambda: load_ui_preferences(include_name=True),
+            inputs=None, outputs=[project_name] + outputs,
+            show_progress="hidden",
+        )
+        project_name.input(
+            lambda name: load_ui_preferences(name, include_name=False),
+            inputs=[project_name], outputs=outputs,
+            show_progress="hidden",
+        )
+        for component in controls:
+            component.input(
+                save_ui_preferences,
+                inputs=[project_name] + controls,
+                outputs=[preferences_status],
+                show_progress="hidden",
+            )
 
     return demo
 
@@ -951,7 +1198,17 @@ def main() -> None:
 
     KAGGLE_ROOT.mkdir(parents=True, exist_ok=True)
     demo = build_ui()
+    auth_user = os.environ.get("PIPER_STUDIO_AUTH_USER", "").strip()
+    auth_password = os.environ.get("PIPER_STUDIO_AUTH_PASSWORD", "")
+    auth = (auth_user, auth_password) if auth_user and auth_password else None
+    if args.share and auth is None:
+        print(
+            "WARNING: Public Gradio link has no authentication; "
+            "set PIPER_STUDIO_AUTH_USER and PIPER_STUDIO_AUTH_PASSWORD.",
+            flush=True,
+        )
     demo.queue(default_concurrency_limit=2).launch(
+        auth=auth,
         server_name="0.0.0.0",
         server_port=args.port,
         share=args.share,

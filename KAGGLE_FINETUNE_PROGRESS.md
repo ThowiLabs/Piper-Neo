@@ -280,3 +280,73 @@ Validación de servidor:
 - `6fc3dc96ebe45adcd956a9a07d96bcd339bc5e0e` — Ensure Kaggle NVIDIA libraries for fine-tune jobs
 
 - `6fc3dc96ebe45adcd956a9a07d96bcd339bc5e0e` — Harden Kaggle CUDA discovery for Gradio jobs
+
+
+## Prueba GPU real — 2026-10-07
+
+- Se identificó una diferencia entre el kernel de Kaggle y el proceso MCP:
+  - los dispositivos `/dev/nvidia0` y `/dev/nvidia1` estaban visibles;
+  - el driver del host era NVIDIA 580.178.04;
+  - `libcuda.so` estaba en `/usr/local/nvidia/lib64`;
+  - esa ruta no estaba incluida en el loader del proceso MCP.
+- Corrección aplicada:
+  - `LD_LIBRARY_PATH=/usr/local/nvidia/lib64` para procesos de entrenamiento;
+  - preload explícito de `/usr/local/nvidia/lib64/libcuda.so.1` en Gradio antes de importar torch.
+- Después de la corrección, PyTorch detecta:
+  - CUDA disponible: True
+  - GPU count: 2
+  - GPU 0: Tesla T4
+  - GPU 1: Tesla T4
+- Fine-tune real ejecutado sobre Capibara con:
+  - accelerator: gpu
+  - CUDA_VISIBLE_DEVICES: 0
+  - batch size: 8
+  - max_phoneme_ids: 400
+  - checkpoint base: davefx-medium
+  - fine-tune mediante --init-from-checkpoint
+- Duración antes de terminación manual: ~74 s de ejecución antes de SIGTERM (~81 s incluyendo apagado).
+- Se alcanzó `epoch=0-step=84.ckpt`.
+- Monitoreo NVML durante entrenamiento:
+  - utilización observada: hasta 99%
+  - muestra sostenida: 88%, 99%, 53%, 58%, 84%
+  - pico de memoria observado del proceso: ~10.7 GiB
+  - GPU 1 permaneció libre.
+- El trainer reportó explícitamente:
+  - `GPU available: True (cuda), used: True`
+  - `LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]`
+  - `Fine-tune initialization loaded 784/784 compatible tensors`
+- Gradio fue validado con CUDA visible y túnel público.
+
+
+## Protección de entrenamiento activo durante pruebas de inferencia — 2026-10-07
+
+- Gradio de entrenamiento existente: puerto 7861, PID 1713 (NO detenido ni reiniciado).
+- Fine-tune GPU activo: PID 1734, dataset capibara/training, batch 12 y checkpoint cada 15 minutos.
+- Checkpoint confirmado mientras el proceso corría: epoch=2-step=1382.ckpt.
+- Nuevo servidor de inferencia SOLO LECTURA/PRUEBAS: puerto 7862, PID 1930, https://04ef9039ff44e73cc7.gradio.live (temporal).
+- Nuevo módulo de arranque aislado: src/python/piper_train/inference_server.py; genera WAV con CPU, exporta ONNX y no ofrece comandos de entrenamiento ni eliminación de datasets.
+- Enlace público verificado mediante HTTP 200.
+- Construcción del tarball portable detenida sin afectar el entrenamiento: el archivo parcial fue eliminado para reservar disco (5.1 GB libres, 75% usado).
+- Próximo empaquetado: hacerlo cuando el entrenamiento termine o fuera del disco de trabajo compartido, para evitar interferencia y falta de espacio.
+
+
+## Gradio integrado + respaldos HF en raíz + restauración — 2026-10-07
+
+- Rama de desarrollo: `feature/resilient-finetune-studio`; `main` NO modificado.
+- Cinco pestañas en el entrenamiento, con inferencia integrada como pestaña `5. Inferencia y exportación ONNX`.
+- Respaldos a HF ahora delegados a `hf_backup.sync_verified_checkpoints`:
+  - ruta HF: **raíz del repo**, `config.json` + `epoch=N-step=N.ckpt`.
+  - conserva nombres originales, NO usa carpetas, NO elimina ningún archivo del repo HF.
+  - valida checkpoint completo antes de subir: estabilidad/snapshot, torch.load, epoch/step, 2 optimizadores, 784 tensores en ejemplo real, compatibilidad config, SHA-256, verificación remota de tamaño.
+  - reintenta fallos; manifest local evita subir de nuevo el mismo contenido.
+  - limitación importante: validación estructural no garantiza calidad perceptual del audio; inferencia ofrece comprobación de audio.
+  - pruebas simuladas HF: rechaza archivos inválidos sin subir nada; repo en raíz; idempotencia; confirmación remota.
+  - **No hubo subida real a HF**, ya que falta token del usuario.
+- Un monitor HF independiente (`hf_watcher.py`) puede seguir subiendo checkpoints generados por otra instancia mientras ésta entrena; no necesita reiniciar ni controlar el trainer. Token solo en RAM/variable de entorno, no en JSON de preferencias.
+- Preferencias no secretas se guardan atómicamente por proyecto en `.studio_preferences.json` y último proyecto en `.studio_last_project.json`; se recargan en `demo.load` al refrescar. Se recuperan estado/log/checkpoints y selección de inferencia; no se restauran secretos ni archivos de subida temporales por seguridad.
+- Guardas de proceso comparan `/proc/*/cmdline` con el `--dataset-dir` antes de iniciar, borrar o preprocesar un proyecto existente. Se detectó fine-tune activo PID 1734 en `/kaggle/working/piper_finetune/capibara/training`.
+- Nueva instancia segura Gradio: puerto 7863, autenticación habilitada, enlace temporal `https://e4c75bf834928de3e4.gradio.live` (no guardar credenciales en el repo).
+- Se conservaron sin reiniciar los servidores 7860 y 7861, y el proceso GPU de entrenamiento. Checkpoint observado durante última verificación: `epoch=5-step=2860.ckpt`.
+- Se cerró SOLO el antiguo servidor de inferencia 7862 tras iniciar la nueva web de entrenamiento.
+- 7 tests `unittest` completados y `git diff --check` sin errores.
+- Construcción del paquete portátil aplazada mientras se entrena para preservar espacio en disco.

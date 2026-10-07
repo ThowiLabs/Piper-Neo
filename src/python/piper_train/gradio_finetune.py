@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.parse
 import zipfile
 from pathlib import Path
@@ -259,7 +260,15 @@ def prepare_dataset(
     zip_upload,
     metadata_upload,
     reset_project: bool,
+    *,
+    _on_step=None,
 ) -> str:
+    # Stage markers allow Gradio to report exactly where a preparation failed.
+    def stage(label: str) -> None:
+        if _on_step is not None:
+            _on_step(label)
+
+    stage("Comprobar entrenamiento existente y permisos del proyecto")
     project = _project_dir(project_name)
     _assert_no_external_training(project)
     if JOB.is_running() and JOB.project == project:
@@ -268,6 +277,7 @@ def prepare_dataset(
     input_dir = project / "input"
     training_dir = project / "training"
 
+    stage("Preparar carpetas del dataset")
     if reset_project and project.exists():
         shutil.rmtree(project)
 
@@ -275,6 +285,7 @@ def prepare_dataset(
     input_dir.mkdir(parents=True, exist_ok=True)
     training_dir.mkdir(parents=True, exist_ok=True)
 
+    stage("Localizar ZIP subido o descargar enlace del dataset")
     archive = _upload_path(zip_upload)
     if archive is None and (source_url or "").strip():
         archive = source_dir / "dataset.zip"
@@ -285,6 +296,7 @@ def prepare_dataset(
     if not archive.exists():
         raise gr.Error(f"No existe el archivo del dataset: {archive}")
 
+    stage("Abrir y extraer el ZIP del dataset")
     extracted = source_dir / "extracted"
     if extracted.exists():
         shutil.rmtree(extracted)
@@ -297,12 +309,14 @@ def prepare_dataset(
     else:
         raise gr.Error("El dataset debe ser un ZIP.")
 
+    stage("Localizar CSV de metadatos")
     metadata = _upload_path(metadata_upload) or _find_metadata(extracted)
     if metadata is None or not metadata.exists():
         raise gr.Error(
             "No encontré metadata.csv dentro del ZIP. Sube el CSV/metadata por separado."
         )
 
+    stage("Buscar archivos WAV y comprobar nombres")
     wav_map, wav_collisions = _build_wav_map(extracted)
     if not wav_map:
         raise gr.Error("No encontré archivos WAV dentro del dataset.")
@@ -313,11 +327,13 @@ def prepare_dataset(
         shutil.rmtree(output_wav_dir)
     output_wav_dir.mkdir(parents=True, exist_ok=True)
 
+    stage("Leer CSV, relacionar WAV y validar transcripciones")
     result = _normalize_metadata(metadata, wav_map, output_metadata, output_wav_dir)
     result["wav_files_in_archive"] = len(wav_map)
     result["wav_name_collisions"] = wav_collisions
     result["project_dir"] = str(project)
 
+    stage("Guardar informe de validación")
     (project / "dataset_validation.json").write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -345,7 +361,113 @@ def prepare_dataset(
             "Nombres WAV repetidos dentro del ZIP: " + ", ".join(wav_collisions[:20])
         )
 
+    stage("Validación finalizada")
     return "\n".join(summary)
+
+
+def _sanitize_diagnostic(message: str) -> str:
+    """Redact credentials and private URL query parameters from shared logs."""
+    message = re.sub(r"hf_[A-Za-z0-9]{8,}", "hf_[REDACTED]", message)
+    message = re.sub(
+        r"(?i)\b(authorization|password|api[_-]?key|access[_-]?token|token)"
+        r"([\s\"']*[:=][\s\"']*)([^\s\"']+)",
+        r"\1\2[REDACTED]", message,
+    )
+    # URLs used to fetch private datasets can contain time-limited access keys.
+    message = re.sub(
+        r"https?://[^\s<>\"']+",
+        lambda match: re.split(r"[?#]", match.group(0), 1)[0]
+        + ("?[REDACTED]" if "?" in match.group(0) else ""),
+        message,
+    )
+    return message
+
+
+def _prepare_log_path(project_name: str) -> Path:
+    return KAGGLE_ROOT / "diagnostics" / ("dataset_" + _safe_project_name(project_name) + ".log")
+
+
+def _read_end(path: Path, max_bytes: int = 12000) -> str:
+    if not path.is_file():
+        return ""
+    with path.open("rb") as log:
+        log.seek(0, os.SEEK_END)
+        log.seek(max(0, log.tell() - max_bytes))
+        return log.read().decode("utf-8", "replace")
+
+
+def prepare_dataset_with_diagnostics(
+    project_name: str, source_url: str, zip_upload, metadata_upload,
+    reset_project: bool,
+) -> tuple[str, str, Optional[str]]:
+    """Return error in Gradio outputs, instead of only a generic 'Error' popup.
+
+    All exceptions *inside* the callback are captured. Gradio upload/transport
+    failures that happen before callback execution are available in server logs.
+    """
+    stage = "Iniciar validación"
+    path = _prepare_log_path(project_name)
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def on_step(label: str) -> None:
+        nonlocal stage
+        stage = label
+        _log_append(path, f"ETAPA: {label}")
+
+    try:
+        _log_append(path, f"=== INTENTO {stamp} ===")
+        report = prepare_dataset(
+            project_name, source_url, zip_upload, metadata_upload,
+            reset_project, _on_step=on_step,
+        )
+        _log_append(path, "RESULTADO: CORRECTO")
+        return (
+            "VALIDACIÓN COMPLETADA\n" + report,
+            f"Correcto. Registro detallado: {path}",
+            str(path),
+        )
+    except Exception as error:
+        trace = _sanitize_diagnostic(traceback.format_exc())
+        name = type(error).__name__
+        explanation = _sanitize_diagnostic(str(error)) or "Sin mensaje de excepción"
+        text = (
+            f"ERROR en: {stage}\n"
+            f"Tipo: {name}\n"
+            f"Motivo: {explanation}\n\n"
+            "El entrenamiento NO se ha iniciado. "
+            "Consulta el diagnóstico completo de la pestaña Dataset."
+        )
+        detail = f"FALLO en {stage} ({name})\n{trace}"
+        try:
+            _log_append(path, detail)
+            log_file = str(path)
+        except OSError:
+            log_file = None
+            detail += "\nNo se pudo escribir el archivo de diagnóstico."
+        # Also visible in studio_kaggle.log for pre-upload/debug comparison.
+        print(_sanitize_diagnostic(detail), file=sys.stderr, flush=True)
+        return text, detail[-12000:], log_file
+
+
+def latest_dataset_diagnostics(project_name: str) -> tuple[str, Optional[str]]:
+    """Show also Gradio's own log, including errors BEFORE callbacks execute."""
+    path = _prepare_log_path(project_name)
+    server_log = Path(__file__).resolve().parents[3] / "studio_kaggle.log"
+    lines = []
+    local = _read_end(path)
+    if local:
+        lines.append("=== VALIDACIÓN / DESCARGA / CSV ===\n" + local)
+    server = _read_end(server_log)
+    if server:
+        lines.append("=== SERVIDOR GRADIO: studio_kaggle.log ===\n" + server)
+    if not lines:
+        return (
+            "Todavía no hay registros. Si el archivo CSV falla ANTES de llamar "
+            "a Gradio, consulta la salida de la celda 'Abrir Gradio' del notebook "
+            "o /kaggle/working/Piper-Neo/studio_kaggle.log.",
+            None,
+        )
+    return _sanitize_diagnostic("\n\n".join(lines))[-16000:], str(path) if path.is_file() else None
 
 
 def _tail(path: Path, lines: int = 80) -> str:
@@ -1052,11 +1174,32 @@ def build_ui() -> gr.Blocks:
                 label="Recrear el proyecto (borra el proyecto existente)",
             )
             prepare_btn = gr.Button("Preparar y validar dataset", variant="primary")
-            dataset_report = gr.Textbox(label="Validación", lines=12)
+            dataset_report = gr.Textbox(
+                label="Resultado de la validación (incluye motivo y etapa del error)",
+                lines=12, interactive=False,
+            )
+            gr.Markdown(
+                "Si Gradio solo muestra **Error**, pulsa **Ver diagnóstico**: "
+                "puede haberse producido durante la subida del CSV/ZIP, "
+                "antes de ejecutar la validación. No hace falta reiniciar Gradio."
+            )
+            dataset_debug_btn = gr.Button("Ver diagnóstico del servidor y dataset")
+            dataset_debug = gr.Textbox(
+                label="Diagnóstico técnico / traceback (copiar para corregir)",
+                lines=13, interactive=False,
+            )
+            dataset_debug_file = gr.File(
+                label="Descargar registro de validación", interactive=False,
+            )
             prepare_btn.click(
-                prepare_dataset,
+                prepare_dataset_with_diagnostics,
                 inputs=[project_name, source_url, zip_upload, metadata_upload, reset_project],
-                outputs=dataset_report,
+                outputs=[dataset_report, dataset_debug, dataset_debug_file],
+            )
+            dataset_debug_btn.click(
+                latest_dataset_diagnostics,
+                inputs=[project_name],
+                outputs=[dataset_debug, dataset_debug_file],
             )
 
         with gr.Tab("2. Preprocess"):

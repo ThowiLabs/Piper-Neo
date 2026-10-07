@@ -69,3 +69,27 @@ para continuar desde HF también es necesario preparar el dataset original.
   confiables**.
 - Un enlace Gradio público sin credenciales no es privado; recomendamos activar
   autenticación antes de administrar datos o HF desde el navegador.
+
+## Diagnosticar errores al preparar datasets en otra instancia Kaggle
+
+En **1. Dataset**, el botón **Preparar y validar dataset** ahora devuelve dentro
+del cuadro de Validación la etapa, el tipo de excepción y el motivo, incluso
+para errores inesperados de descarga ZIP, lectura CSV o acceso al disco.
+El cuadro **Diagnóstico técnico / traceback** incluye la pila completa y
+permite descargar el registro desde
+`/kaggle/working/piper_finetune/diagnostics/dataset_<proyecto>.log`.
+
+Si el archivo no llega a Gradio (por error de transferencia del CSV o ZIP),
+el código de validación ni siquiera se ejecuta. En ese caso presiona
+**Ver diagnóstico del servidor y dataset**: consulta también el archivo
+`/kaggle/working/Piper-Neo/studio_kaggle.log` si lanzaste Gradio
+mediante este notebook. El servidor conserva `show_error=True`.
+Si no aparece ni en ese registro, revisa la pestaña Network/Console del
+navegador y comprueba la carga del archivo.
+
+El notebook configura `MPLBACKEND=Agg` en los procesos aislados para evitar
+el error de `matplotlib_inline.backend_inline` en Kaggle.
+
+Estos cambios **solo se aplican a instancias que ejecuten el nuevo commit**:
+hay que hacer push de la rama y lanzar la versión actualizada; recargar
+el navegador de un servidor Gradio antiguo no actualiza su código Python.

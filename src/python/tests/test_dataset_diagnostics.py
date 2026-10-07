@@ -1,4 +1,7 @@
 """Show dataset failures inside Gradio, including where and why they failed."""
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -9,6 +12,27 @@ from piper_train import gradio_finetune as ui
 
 
 class DatasetDiagnosticTests(unittest.TestCase):
+    def test_matplotlib_inline_environment_is_corrected_before_gradio_import(self):
+        env = {
+            **os.environ,
+            "MPLBACKEND": "module://matplotlib_inline.backend_inline",
+        }
+        code = (
+            "import os; "
+            "from piper_train.gradio_finetune import build_ui; "
+            "import matplotlib; "
+            "assert os.environ['MPLBACKEND']=='Agg'; "
+            "assert matplotlib.get_backend().lower()=='agg'; "
+            "assert build_ui().blocks; "
+            "print('INLINE_BACKEND_FALLBACK_OK')"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env=env, capture_output=True, text=True, timeout=40,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("INLINE_BACKEND_FALLBACK_OK", result.stdout)
+
     def test_bad_zip_is_reported_inline_and_saved(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

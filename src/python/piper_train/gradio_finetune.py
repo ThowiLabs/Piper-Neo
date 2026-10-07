@@ -7,6 +7,13 @@ import csv
 import ctypes
 import json
 import os
+
+# Kaggle notebooks may export a Matplotlib inline backend that is unavailable in
+# the isolated Python 3.10 venv. Set a non-interactive backend BEFORE importing
+# Gradio, Torch, or any dependency that imports Matplotlib. This also protects
+# launches made directly with `python -m piper_train.gradio_finetune`.
+os.environ["MPLBACKEND"] = "Agg"
+
 import re
 import shutil
 import signal

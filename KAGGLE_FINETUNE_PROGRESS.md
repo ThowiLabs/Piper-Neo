@@ -189,7 +189,7 @@ Comando web instalado:
 Creado:
 `notebooks/kaggle_finetune_gradio.ipynb`
 
-Antes del cierre se reemplazará `__PINNED_REF__` por un commit validado para que el bootstrap quede fijado.
+El notebook quedó fijado al commit validado `dac2511eb86ad61c18e32f627baa40e72da776a9` para que el bootstrap no dependa de cambios futuros en `main`.
 
 
 ## Validación real de fine-tune

@@ -5,6 +5,7 @@ does not expose that token to the checkpoint validator subprocess.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -15,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 
 from .checkpoint_guard import CHECKPOINT_NAME, stable_file
 
@@ -91,14 +92,8 @@ def _write_manifest(project: Path, manifest: dict) -> None:
     os.replace(temp, path)
 
 
-def _reject_existing_remote_checkpoint(
-    api: Any, repo_id: str, remote_path: str, sha256: str
-) -> bool:
-    """Prevent overwriting ANY previously published checkpoint on HF.
-
-    Return True only if a remote checkpoint has an independently verifiable
-    matching LFS SHA-256. Without an accessible SHA, fail closed.
-    """
+def _remote_info(api: Any, repo_id: str, remote_path: str):
+    """Query Hugging Face EVERY time; a local history file is never proof."""
     try:
         infos = api.get_paths_info(
             repo_id, [remote_path], repo_type="model", expand=True
@@ -106,30 +101,98 @@ def _reject_existing_remote_checkpoint(
     except TypeError:
         infos = api.get_paths_info(repo_id, [remote_path], repo_type="model")
     if not infos:
-        return False
+        return None
     if len(infos) != 1 or getattr(infos[0], "path", None) != remote_path:
-        raise RuntimeError("HF returned ambiguous checkpoint paths")
-    lfs = getattr(infos[0], "lfs", None)
-    stored_sha = (
-        lfs.get("sha256")
-        if isinstance(lfs, dict)
+        raise RuntimeError(f"HF devolvió una ruta ambigua para {remote_path}")
+    return infos[0]
+
+
+def _remote_sha(info) -> str | None:
+    lfs = getattr(info, "lfs", None)
+    return (
+        lfs.get("sha256") if isinstance(lfs, dict)
         else getattr(lfs, "sha256", None)
     )
-    if stored_sha and stored_sha.lower() == sha256.lower():
-        return True
-    raise ValueError(
-        f"El checkpoint {remote_path} ya existe en HF y no puede verificarse "
-        "que sea idéntico. No se sobrescribe ninguna versión."
-    )
+
+
+def _remote_checkpoint_status(
+    api: Any, repo_id: str, remote_path: str, local_size: int, local_sha: str
+) -> str:
+    """Return missing, verified, or present_without_sha. NEVER overwrite."""
+    info = _remote_info(api, repo_id, remote_path)
+    if info is None:
+        return "missing"
+    size = getattr(info, "size", None)
+    if size != local_size:
+        raise ValueError(
+            f"{remote_path} YA EXISTE en HF con tamaño diferente "
+            f"({size} vs {local_size}). Se conserva el remoto sin sobrescribirlo."
+        )
+    remote_sha = _remote_sha(info)
+    if remote_sha and remote_sha.lower() != local_sha.lower():
+        raise ValueError(
+            f"{remote_path} YA EXISTE en HF con SHA256 diferente. "
+            "Se conserva el remoto sin sobrescribirlo."
+        )
+    return "verified" if remote_sha else "present_without_sha"
 
 
 def _confirmed_remote_size(api: Any, repo_id: str, remote_path: str, expected: int) -> None:
-    infos = api.get_paths_info(repo_id, [remote_path], repo_type="model")
-    if len(infos) != 1 or getattr(infos[0], "path", None) != remote_path:
-        raise RuntimeError("HF upload not visible at expected remote path")
-    size = getattr(infos[0], "size", None)
-    if size != expected:
-        raise RuntimeError(f"HF file size differs ({size} != {expected})")
+    # HF's metadata may take a moment to become visible after a commit.
+    for attempt in range(3):
+        info = _remote_info(api, repo_id, remote_path)
+        if info is not None and getattr(info, "size", None) == expected:
+            return
+        if attempt < 2:
+            time.sleep(1)
+    raise RuntimeError(
+        f"HF no confirmó {remote_path} o el tamaño no coincide ({expected}). "
+        "Se reintentará en el próximo respaldo; no se marcará como subido."
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _ensure_remote_config(api: Any, repo_id: str, token: str, config: Path) -> str:
+    """Upload missing config.json or confirm identical bytes. Never replace."""
+    remote_path = "config.json"
+    info = _remote_info(api, repo_id, remote_path)
+    if info is None:
+        # Checkpoint is already valid before this function is called.
+        api.upload_file(
+            path_or_fileobj=str(config), path_in_repo=remote_path,
+            repo_id=repo_id, repo_type="model",
+            commit_message="Add Piper config.json (append-only backup)",
+        )
+        _confirmed_remote_size(api, repo_id, remote_path, config.stat().st_size)
+        return "uploaded"
+    size = getattr(info, "size", None)
+    if size != config.stat().st_size:
+        raise ValueError(
+            "config.json YA EXISTE en HF pero su tamaño es diferente. "
+            "No se sobrescribe: revisa que sea la misma voz/dataset."
+        )
+    # Small config: verify content, not only size. In tests the fake API exposes
+    # a download helper; in production Hugging Face provides hf_hub_download.
+    if hasattr(api, "download_file"):
+        remote_file = Path(api.download_file(repo_id=repo_id, filename=remote_path))
+    else:
+        remote_file = Path(hf_hub_download(
+            repo_id=repo_id, filename=remote_path, repo_type="model",
+            token=token or None,
+        ))
+    if _sha256_file(remote_file) != _sha256_file(config):
+        raise ValueError(
+            "config.json YA EXISTE en HF pero su contenido es diferente. "
+            "Se conserva la versión remota sin cambios."
+        )
+    return "already_remote"
 
 
 def sync_verified_checkpoints(
@@ -159,9 +222,11 @@ def sync_verified_checkpoints(
     api = api or HfApi(token=token)
     repo_id = resolve_repo_id(repo_id, token, api=api)
     prefix = (remote_prefix or "").strip("/")
-    if prefix and (any(part in {".", "..", ""} for part in prefix.split("/"))
-                   or prefix.startswith("/")):
-        raise ValueError("Invalid remote folder path")
+    if prefix:
+        raise ValueError(
+            "El respaldo de Piper no permite carpetas en HF: "
+            "config.json y cada checkpoint deben quedar en la raíz."
+        )
     config = project / "training" / "config.json"
     if not config.is_file():
         raise FileNotFoundError(f"Missing config.json: {config}")
@@ -171,7 +236,10 @@ def sync_verified_checkpoints(
         raise ValueError("config.json is invalid")
 
     candidates = checkpoint_candidates(project)
-    result = {"uploaded": [], "skipped": [], "failed": [], "repo_id": repo_id}
+    result = {
+        "uploaded": [], "skipped": [], "failed": [],
+        "repo_id": repo_id, "config_status": "pending",
+    }
     if not candidates:
         return result
 
@@ -185,10 +253,9 @@ def sync_verified_checkpoints(
         key = f"{repo_id}::{remote_path}"
         try:
             before = stable_file(checkpoint, min_age=min_age)
-            known = manifest.get(key)
-            if known and known.get("signature") == list(before):
-                result["skipped"].append(checkpoint.name + " (already uploaded)")
-                continue
+            # Local .hf_synced_verified.json is audit history ONLY. A previous
+            # upload is not considered present until HF itself confirms it.
+            # This fixes repos that were deleted/recreated after first backup.
 
             # Enough free space for one additional checkpoint and some headroom.
             if shutil.disk_usage(stage_dir).free < before[0] + 512 * 1024 * 1024:
@@ -212,33 +279,43 @@ def sync_verified_checkpoints(
                     repo_id=repo_id, repo_type="model", private=bool(private),
                     exist_ok=True,
                 )
-                remote_config = f"{prefix}/config.json" if prefix else "config.json"
-                api.upload_file(
-                    path_or_fileobj=str(config), path_in_repo=remote_config,
-                    repo_id=repo_id, repo_type="model",
-                    commit_message="Update validated Piper configuration",
-                )
-                _confirmed_remote_size(api, repo_id, remote_config, config.stat().st_size)
+                config_status = _ensure_remote_config(api, repo_id, token, config)
+                result["config_status"] = config_status
 
-                already_on_hf = _reject_existing_remote_checkpoint(
-                    api, repo_id, remote_path, report["sha256"]
+                remote_status = _remote_checkpoint_status(
+                    api, repo_id, remote_path, before[0], report["sha256"]
                 )
-                if not already_on_hf:
+                if remote_status == "missing":
                     api.upload_file(
                         path_or_fileobj=str(snapshot), path_in_repo=remote_path,
                         repo_id=repo_id, repo_type="model",
-                        commit_message=f"Verified Piper {checkpoint.name} step {report['global_step']}",
+                        commit_message=f"Add verified Piper {checkpoint.name} step {report['global_step']}",
                     )
-                _confirmed_remote_size(api, repo_id, remote_path, before[0])
+                    _confirmed_remote_size(api, repo_id, remote_path, before[0])
+                    remote_status = _remote_checkpoint_status(
+                        api, repo_id, remote_path, before[0], report["sha256"]
+                    )
+                    if remote_status == "missing":
+                        raise RuntimeError("HF no devolvió el checkpoint recién subido")
+                    result["uploaded"].append(checkpoint.name)
+                else:
+                    note = (
+                        "verificado remotamente"
+                        if remote_status == "verified"
+                        else "existe remotamente con tamaño correcto; hash LFS no disponible"
+                    )
+                    result["skipped"].append(f"{checkpoint.name} ({note})")
+
+                # The manifest records proof only AFTER remote confirmation.
                 manifest[key] = {
                     "signature": list(before),
                     "sha256": report["sha256"],
                     "epoch": report["epoch"],
                     "step": report["global_step"],
                     "validated": True,
+                    "remote_status": remote_status,
                 }
                 _write_manifest(project, manifest)
-                result["uploaded"].append(checkpoint.name)
             finally:
                 if snapshot.exists():
                     snapshot.unlink()

@@ -483,16 +483,19 @@ def sync_to_huggingface(
             remote_prefix="",
         )
     message = (
-        f"Repo HF: {repo_id}\n"
-        f"Checkpoints verificados y subidos: {len(report['uploaded'])}\n"
-        f"Ya sincronizados/omitidos: {len(report['skipped'])}\n"
-        f"Rechazados o no subidos: {len(report['failed'])}"
+        f"Repositorio de respaldo: {report['repo_id']}\n"
+        f"Checkpoints NUEVOS respaldados en HF: {len(report['uploaded'])}\n"
+        f"Checkpoints que YA EXISTEN remotamente: {len(report['skipped'])}\n"
+        f"Fallos/rechazados (no se subieron): {len(report['failed'])}\n"
+        f"config.json: {report.get('config_status', 'sin comprobar')}"
     )
     if report["uploaded"]:
-        message += "\nSubidos: " + ", ".join(report["uploaded"])
+        message += "\nNuevos respaldos: " + ", ".join(report["uploaded"])
+    if report["skipped"]:
+        message += "\nYa estaban en HF: " + ", ".join(report["skipped"][:15])
     for error in report["failed"]:
         message += f"\nNO SUBIDO {error['file']}: {error['reason']}"
-    _log_append(_project_dir(project_name) / "hf_sync.log", message.replace("\n", " | "))
+    _log_append(_project_dir(project_name) / "hf_backup.log", message.replace("\n", " | "))
     return message
 
 class TrainingJob:
@@ -630,9 +633,11 @@ class TrainingJob:
         if log_tail:
             status.extend(["", "--- train.log ---", log_tail])
 
-        sync_log = _tail(project / "hf_sync.log", 30)
-        if sync_log:
-            status.extend(["", "--- hf_sync.log ---", sync_log])
+        backup_log = _tail(project / "hf_backup.log", 30)
+        if not backup_log:
+            backup_log = _tail(project / "hf_sync.log", 15)
+        if backup_log:
+            status.extend(["", "--- Respaldo HF ---", backup_log])
 
         downloads = []
         config_path = project / "training" / "config.json"
@@ -798,7 +803,7 @@ def start_training(
         f"Accelerator: {accel} (CUDA visible={cuda})\nBatch size: {batch_size}\n"
         f"Max epochs: {max_epochs}\n"
         f"Checkpoint: {'cada ' + str(checkpoint_minutes) + ' min' if float(checkpoint_minutes) > 0 else 'cada ' + str(checkpoint_epochs) + ' epoch(s)'}\n"
-        f"HF sync: {sync_state}\n"
+        f"Respaldo incremental HF: {sync_state}\n"
         f"Log: {project / 'train.log'}"
     )
 
@@ -1137,11 +1142,13 @@ def build_ui() -> gr.Blocks:
             accelerator = gr.Dropdown(["auto", "gpu", "cpu"], value="auto", label="Accelerator")
 
             gr.Markdown(
-                "### Backup automático a Hugging Face\n"
-                "Opcional. Cada checkpoint válido se sube DIRECTAMENTE a la raíz "
-                "del repositorio HF, con su nombre original, junto a config.json. "
-                "No se eliminan ni modifican checkpoints anteriores en HF. "
-                "Puedes usar la variable HF_TOKEN."
+                "### Respaldo incremental a Hugging Face\n"
+                "Revisa los archivos que realmente EXISTEN en el repo HF. "
+                "Sube solamente checkpoints nuevos y validados con su nombre "
+                "original junto a config.json directamente en la raíz. "
+                "**Nunca elimina ni sobrescribe versiones anteriores en HF.** "
+                "Un registro local no prueba que el archivo remoto exista. "
+                "Puedes usar HF_TOKEN como secreto del entorno."
             )
             hf_repo_id = gr.Textbox(label="Repositorio HF (nombre o usuario/nombre)", placeholder="mi-voz-piper o usuario/mi-voz-piper")
             hf_token = gr.Textbox(label="HF token", type="password")
@@ -1158,7 +1165,7 @@ def build_ui() -> gr.Blocks:
             )
             hf_auto_backup = gr.Checkbox(
                 value=True,
-                label="Subir automáticamente cada checkpoint nuevo y validado a HF",
+                label="Respaldar automáticamente en HF cada nuevo checkpoint válido",
             )
             gr.Markdown(
                 "El respaldo puede iniciarse **aunque este entrenamiento ya esté "
@@ -1170,7 +1177,7 @@ def build_ui() -> gr.Blocks:
                 disable_backup_btn = gr.Button("Detener solo respaldo HF")
                 check_backup_btn = gr.Button("Estado del respaldo")
             backup_report = gr.Textbox(
-                label="Backup automático (sobrevive al refresco de esta página)",
+                label="Respaldo automático HF (sobrevive al refresco de esta página)",
                 lines=3, interactive=False,
             )
             enable_backup_btn.click(
@@ -1238,8 +1245,8 @@ def build_ui() -> gr.Blocks:
                 inputs=[project_name],
                 outputs=[status_box, checkpoint_files],
             )
-            sync_btn = gr.Button("Sincronizar ahora con Hugging Face")
-            sync_report = gr.Textbox(label="HF sync", lines=8)
+            sync_btn = gr.Button("Respaldar checkpoints nuevos en Hugging Face", variant="primary")
+            sync_report = gr.Textbox(label="Resultado del respaldo incremental HF", lines=9)
             sync_btn.click(
                 sync_to_huggingface,
                 inputs=[project_name, hf_repo_id, hf_token, hf_private, hf_remote_prefix],

@@ -38,7 +38,7 @@ class BackupWatcher:
                 f"Proyecto: {self.details['project'].name}. "
                 f"HF: {self.details['repo_id']}. "
                 f"Intervalo: {self.details['interval']} s. "
-                f"Última sincronización: {self.last_sync or 'pendiente'}. "
+                f"Última revisión del repo HF: {self.last_sync or 'pendiente'}. "
                 f"{self.last_report}"
             )
 
@@ -91,9 +91,10 @@ class BackupWatcher:
                         private=details["private"], remote_prefix="",
                     )
                 message = (
-                    f"Subidos: {len(report['uploaded'])}; "
-                    f"sin cambios: {len(report['skipped'])}; "
-                    f"fallos: {len(report['failed'])}."
+                    f"Respaldos NUEVOS en HF: {len(report['uploaded'])}; "
+                    f"ya existentes remotamente: {len(report['skipped'])}; "
+                    f"rechazados: {len(report['failed'])}; "
+                    f"config.json: {report.get('config_status', 'pendiente')}."
                 )
                 if report["failed"]:
                     message += " " + "; ".join(
@@ -105,7 +106,7 @@ class BackupWatcher:
                 (details["project"] / "hf_sync.log").parent.mkdir(
                     parents=True, exist_ok=True
                 )
-                with (details["project"] / "hf_sync.log").open(
+                with (details["project"] / "hf_backup.log").open(
                     "a", encoding="utf-8"
                 ) as log:
                     log.write(f"[{self.last_sync}] {message}\n")

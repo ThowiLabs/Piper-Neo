@@ -15,6 +15,8 @@ from piper_train.hf_backup import sync_verified_checkpoints, resolve_repo_id
 class FakeHf:
     def __init__(self):
         self.files = {}
+        self.contents = {}
+        self.checkpoint_sha = {}
         self.creates = []
         self.uploads = []
 
@@ -23,11 +25,29 @@ class FakeHf:
 
     def upload_file(self, *, path_or_fileobj, path_in_repo, repo_id, **kw):
         self.files[path_in_repo] = Path(path_or_fileobj).stat().st_size
+        if path_in_repo == "config.json":
+            self.contents[path_in_repo] = Path(path_or_fileobj).read_bytes()
+        else:
+            # The mock validator returns the known fixture SHA "abc".
+            self.checkpoint_sha[path_in_repo] = "abc"
         self.uploads.append(path_in_repo)
+
+    def download_file(self, repo_id, filename):
+        import tempfile
+        path = Path(tempfile.gettempdir()) / "piper_test_hf_remote_config.json"
+        path.write_bytes(self.contents[filename])
+        return str(path)
 
     def get_paths_info(self, repo_id, paths, **kw):
         return [
-            SimpleNamespace(path=path, size=self.files[path])
+            SimpleNamespace(
+                path=path,
+                size=self.files[path],
+                lfs=(
+                    SimpleNamespace(sha256=self.checkpoint_sha[path])
+                    if path in self.checkpoint_sha else None
+                ),
+            )
             for path in paths if path in self.files
         ]
 
@@ -107,6 +127,102 @@ class VerifiedBackupTests(unittest.TestCase):
             )
             self.assertEqual(again["uploaded"], [])
             self.assertEqual(len(hf.uploads), 2)
+
+    def test_old_local_manifest_cannot_hide_empty_remote_repo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            ckpt = write_project(project)
+            hub = FakeHf()
+            def valid(snapshot, config):
+                return {
+                    "size": snapshot.stat().st_size,
+                    "name": snapshot.name, "sha256": "abc",
+                    "epoch": 0, "global_step": 84,
+                }
+            first = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub, validator=valid
+            )
+            self.assertEqual(first["uploaded"], [ckpt.name])
+            self.assertTrue((project / ".hf_synced_verified.json").exists())
+            # User deletes and recreates repo: old local manifest stays.
+            hub.files.clear()
+            hub.contents.clear()
+            hub.checkpoint_sha.clear()
+            second = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub, validator=valid
+            )
+            self.assertEqual(second["uploaded"], [ckpt.name])
+            self.assertEqual(second["skipped"], [])
+            self.assertEqual(hub.uploads.count(ckpt.name), 2)
+            self.assertEqual(hub.uploads.count("config.json"), 2)
+
+    def test_remote_checkpoint_existing_is_kept_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            ckpt = write_project(project)
+            hub = FakeHf()
+            def valid(snapshot, config):
+                return {
+                    "size": snapshot.stat().st_size,
+                    "name": snapshot.name, "sha256": "abc",
+                    "epoch": 0, "global_step": 84,
+                }
+            first = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub, validator=valid
+            )
+            self.assertEqual(first["uploaded"], [ckpt.name])
+            second = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub, validator=valid
+            )
+            self.assertEqual(second["uploaded"], [])
+            self.assertEqual(len(second["skipped"]), 1)
+            self.assertEqual(hub.uploads, ["config.json", ckpt.name])
+
+    def test_conflicting_remote_sha_not_overwritten_or_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            ckpt = write_project(project)
+            hub = FakeHf()
+            config = project / "training" / "config.json"
+            hub.files["config.json"] = config.stat().st_size
+            hub.contents["config.json"] = config.read_bytes()
+            hub.files[ckpt.name] = ckpt.stat().st_size
+            hub.checkpoint_sha[ckpt.name] = "different-remote-hash"
+            result = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub,
+                validator=lambda s,c: {
+                    "size": s.stat().st_size, "name": s.name,
+                    "sha256": "abc", "epoch": 0, "global_step": 84
+                }
+            )
+            self.assertEqual(result["uploaded"], [])
+            self.assertEqual(len(result["failed"]), 1)
+            self.assertEqual(hub.uploads, [])
+            self.assertIn(ckpt.name, hub.files)
+
+    def test_new_checkpoint_does_not_remove_older_remote_versions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            old = write_project(project)
+            hub = FakeHf()
+            def valid(snapshot, config):
+                return {
+                    "size": snapshot.stat().st_size,
+                    "name": snapshot.name,
+                    "sha256": "abc", "epoch": int(snapshot.name.split("-")[0].split("=")[1]),
+                    "global_step": int(snapshot.stem.split("step=")[1]),
+                }
+            sync_verified_checkpoints(project, "test/my-model", "FAKE", api=hub, validator=valid)
+            newer = old.with_name("epoch=1-step=170.ckpt")
+            with newer.open("wb") as stream:
+                stream.truncate(36 * 1024 * 1024)
+            prev = time.time() - 60
+            os.utime(newer, (prev, prev))
+            second = sync_verified_checkpoints(project, "test/my-model", "FAKE", api=hub, validator=valid)
+            self.assertEqual(second["uploaded"], [newer.name])
+            self.assertIn(old.name, hub.files)
+            self.assertIn(newer.name, hub.files)
+            self.assertEqual(hub.uploads.count(old.name), 1)
 
     def test_rejected_checkpoint_never_uploaded(self):
         with tempfile.TemporaryDirectory() as directory:

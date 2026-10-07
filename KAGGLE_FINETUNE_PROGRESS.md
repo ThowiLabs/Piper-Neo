@@ -372,3 +372,22 @@ Validación de servidor:
 - Los puertos 7860, 7861 y 7863 se mantuvieron; no se interrumpió ninguna instancia.
 - No hubo prueba privada HF real por falta de token, ni se hizo push.
 - El empaquetado portable sigue pendiente por gestión de espacio del notebook.
+
+
+## Corrección crítica: respaldo incremental HF orientado al REMOTO — 2026-10-07 22:xx UTC
+
+- Incidencia observada: el historial `capibara/.hf_synced_verified.json` marcaba `epoch=5-step=2860.ckpt` como subido, aunque el usuario reportó el repositorio remoto vacío.
+- Causa: la versión previa daba `skipped` usando **solo** la firma local del manifiesto sin consultar HF; por eso indicaba 0 nuevos/1 omitido.
+- Solución:
+  1. El manifiesto local es **solo un registro histórico**, no fuente de verdad sobre el estado remoto.
+  2. En cada respaldo, se comprueban `config.json` y cada `epoch=...-step=....ckpt` directamente con la API HF usando el token.
+  3. Si un archivo no existe en HF, se valida el checkpoint, se sube y se confirma que la API devuelve nombre/tamaño esperado; el historial local se actualiza solo después.
+  4. Si existe remoto, se verifica hash LFS (si está publicado) y tamaño. El mismo archivo queda intacto y se informa como "ya existe en HF".
+  5. Si el nombre existe con diferente tamaño/hash, **no se sobrescribe**; se informa el conflicto.
+  6. `config.json` tampoco se sobrescribe. Si existe se comprueba identidad por bytes (descarga del config remoto); si difiere, se rechaza el respaldo para evitar mezcla de modelos.
+  7. El repositorio se puede crear si falta, pero únicamente después de validar un checkpoint.
+  8. No se llama "sincronizar": el botón se llama "Respaldar checkpoints nuevos en Hugging Face" y el monitor indica nuevos, presentes y errores.
+  9. Los checkpoints remotos se mantienen en la raíz del repositorio y **no se borran ni sobrescriben versiones anteriores**.
+- Política de espacio local **sin alterar**: este trainer guarda el checkpoint numerado local más reciente (`save_top_k=1`) para evitar llenar Kaggle. La garantía de conservación histórica aplica al repositorio remoto para las versiones que ya fueron respaldadas; la construcción del paquete portable continúa diferida por espacio.
+- 21 pruebas de regresión aprobadas, incluyendo caso repo remoto vacío con manifiesto local antiguo, archivo remoto existente, conflicto remoto, múltiples versiones y archivo corrupto.
+- La carga real en el repo privado del usuario requiere su token autenticado; no se manipuló ni extrajo el token guardado solo en memoria del servidor anterior.

@@ -10,6 +10,52 @@ from piper_train import gradio_finetune as web
 
 
 class PersistenceTests(unittest.TestCase):
+    def test_hf_resume_builds_full_resume_command_without_starting_trainer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            training = root / "capibara" / "training"
+            training.mkdir(parents=True)
+            (training / "dataset.jsonl").write_text("{}\n")
+            (training / "config.json").write_text("{}")
+            source = root / "valid.ckpt"
+            source.write_bytes(b"mocked")
+            hf_report = {
+                "repository": "user/voice",
+                "filename": "epoch=5-step=2860.ckpt",
+                "download_path": str(source),
+                "epoch": 5,
+                "global_step": 2860,
+                "sha256": "abcdef012345",
+            }
+            with patch.object(web, "KAGGLE_ROOT", root), \
+                 patch.object(web, "_other_training_pids", return_value=[]), \
+                 patch("piper_train.hf_resume.prepare_resume_from_hf", return_value=hf_report) as remote, \
+                 patch.object(web.JOB, "start") as spawn:
+                message = web.start_training(
+                    "capibara", "Resume de corrida", "", None, None, "",
+                    8, 1000, 5, 15, 400, "cpu",
+                    "", "", True, "", 20, False,
+                    "Hugging Face: último válido", "user/voice",
+                    "Automático: último checkpoint válido",
+                )
+            command = spawn.call_args.args[0]
+            self.assertIn("--resume_from_checkpoint", command)
+            self.assertEqual(command[command.index("--resume_from_checkpoint")+1], str(source))
+            self.assertNotIn("--init-from-checkpoint", command)
+            self.assertIn("epoch=5-step=2860.ckpt", message)
+            self.assertEqual(remote.call_args.kwargs["max_epochs"], 1000)
+
+    def test_start_stop_visibility_reflects_real_process_state(self):
+        with patch.object(web, "_other_training_pids", return_value=[4321]):
+            start, stop, message = web.training_buttons("capibara")
+            self.assertFalse(start["visible"])
+            self.assertTrue(stop["visible"])
+            self.assertIn("4321", message)
+        with patch.object(web, "_other_training_pids", return_value=[]):
+            start, stop, message = web.training_buttons("capibara")
+            self.assertTrue(start["visible"])
+            self.assertFalse(stop["visible"])
+
     def test_preferences_survive_page_reload_and_hide_secrets(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -48,8 +94,8 @@ class PersistenceTests(unittest.TestCase):
                 (training / "config.json").write_text('{"hello":"world"}')
                 restored = web.load_ui_preferences(include_name=True)
                 self.assertEqual(restored[0], "capibara")
-                self.assertEqual(len(restored), 27)
-                self.assertIn("config.json", restored[-4][0])
+                self.assertEqual(len(restored), len(studio_state.FIELDS) + 9)
+                self.assertIn("config.json", restored[-7][0])
                 self.assertEqual(restored[studio_state.FIELDS.index("batch_size")+1], 12)
 
     def test_guards_external_process_before_deleting_data(self):

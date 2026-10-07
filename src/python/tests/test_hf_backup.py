@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from piper_train.hf_backup import sync_verified_checkpoints
+from piper_train.hf_backup import sync_verified_checkpoints, resolve_repo_id
 
 
 class FakeHf:
@@ -49,6 +49,39 @@ def write_project(root: Path):
 
 
 class VerifiedBackupTests(unittest.TestCase):
+    def test_short_hf_name_resolves_from_token(self):
+        hf = FakeHf()
+        hf.whoami = lambda **kw: {"name": "my-hf-user"}
+        self.assertEqual(
+            resolve_repo_id("capibara-medium", "FAKE", api=hf),
+            "my-hf-user/capibara-medium",
+        )
+        self.assertEqual(
+            resolve_repo_id("namespace/capibara-medium", "FAKE", api=hf),
+            "namespace/capibara-medium",
+        )
+        with self.assertRaises(ValueError):
+            resolve_repo_id("../capibara-medium", "FAKE", api=hf)
+
+    def test_repo_with_existing_checkpoint_cannot_be_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            checkpoint = write_project(project)
+            hf = FakeHf()
+            hf.files[checkpoint.name] = 12345
+            def valid(snapshot, config):
+                return {
+                    "size": snapshot.stat().st_size,
+                    "name": snapshot.name, "sha256": "abc",
+                    "epoch": 0, "global_step": 84
+                }
+            report = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hf, validator=valid
+            )
+            self.assertEqual(report["uploaded"], [])
+            self.assertEqual(len(report["failed"]), 1)
+            self.assertNotIn(checkpoint.name, hf.uploads)
+
     def test_root_name_and_manifest_prevent_reupload(self):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)

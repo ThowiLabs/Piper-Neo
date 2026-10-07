@@ -10,7 +10,8 @@ import threading
 import time
 from pathlib import Path
 
-from .hf_backup import sync_verified_checkpoints
+from .hf_backup import resolve_repo_id, sync_verified_checkpoints
+from huggingface_hub import HfApi
 
 _SYNC_LOCK = threading.Lock()
 
@@ -48,10 +49,12 @@ class BackupWatcher:
             raise ValueError("Falta el repositorio HF (usuario/modelo).")
         if not token:
             raise ValueError("Falta token HF o variable HF_TOKEN.")
+        # Resolve username/model once before starting, not on every polling cycle.
+        resolved_repo = resolve_repo_id(repo_id, token, api=HfApi(token=token))
         with self.lock:
             if self.running():
                 if (self.details["project"] == project and
-                        self.details["repo_id"] == repo_id.strip()):
+                        self.details["repo_id"] == resolved_repo):
                     return self.status()
                 raise ValueError(
                     "Ya hay un respaldo activo para otro proyecto o repo. "
@@ -59,9 +62,9 @@ class BackupWatcher:
                 )
             self.stop_event = threading.Event()
             self.details = {
-                "project": Path(project), "repo_id": repo_id.strip(),
+                "project": Path(project), "repo_id": resolved_repo,
                 "token": token, "private": bool(private),
-                "interval": max(30, int(interval)),
+                "interval": max(15, int(interval)),
             }
             self.last_report = ""
             self.last_sync = None

@@ -350,3 +350,25 @@ Validación de servidor:
 - Se cerró SOLO el antiguo servidor de inferencia 7862 tras iniciar la nueva web de entrenamiento.
 - 7 tests `unittest` completados y `git diff --check` sin errores.
 - Construcción del paquete portátil aplazada mientras se entrena para preservar espacio en disco.
+
+
+## Nueva versión: HF Resume + controles inteligentes — 2026-10-07
+
+- Rama: `feature/resilient-finetune-studio` sin modificaciones a `main`.
+- Opciones de origen del resume: último checkpoint local / subida o URL / Hugging Face.
+- HF Resume lee solamente archivos raíz de repos de tipo `model`, requiere `config.json`.
+- Lista checkpoints por `global_step` (más reciente primero), no por época ni orden alfabético.
+- Puede usar selección `Automático: último checkpoint válido`, probando checkpoints anteriores si el nuevo está roto, o una versión explícita sin fallback.
+- Permite nombre corto de repo con token para resolver namespace o `usuario/nombre`.
+- Descarga metadata + checkpoint con `hf_hub_download`, comprueba metadatos HF, SHA256 cuando está publicado, compatibilidad de `config.json` con dataset local, estructura Lightning y optimizadores.
+- Jamás reemplaza `training/config.json` ni el dataset local durante recuperación HF.
+- Genera manifiesto sin token en `resume_hf/<repo>/.last_resume.json`.
+- Pasa el checkpoint al trainer mediante `--resume_from_checkpoint` para conservar optimizadores y época, no mediante init-from-checkpoint.
+- Gradio recopila preferencias de fuente HF y selección de versión; tokens no persisten en el archivo de preferencias.
+- 17 pruebas unitarias/regresión realizadas correctamente, incluida preparación del comando de reanudación.
+- Se probó flujo completo de prevalidación de un `epoch=5-step=2860.ckpt` real mediante mock remoto en el mismo volumen (SHA256 y `global_step=2860`).
+- Nueva web pública **sin auth al no configurar user/pass** en puerto 7864:
+  `https://5e187940e49fe442e7.gradio.live`, HTTP 200, cinco pestañas, menú HF resume visible.
+- Los puertos 7860, 7861 y 7863 se mantuvieron; no se interrumpió ninguna instancia.
+- No hubo prueba privada HF real por falta de token, ni se hizo push.
+- El empaquetado portable sigue pendiente por gestión de espacio del notebook.

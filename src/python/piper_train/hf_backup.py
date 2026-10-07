@@ -20,6 +20,27 @@ from huggingface_hub import HfApi
 from .checkpoint_guard import CHECKPOINT_NAME, stable_file
 
 
+def resolve_repo_id(repo_name: str, token: str, api: Optional[Any] = None) -> str:
+    """Accept namespace/model or a short model name owned by the HF token."""
+    name = (repo_name or "").strip()
+    if not name:
+        raise ValueError("Indica el nombre del repositorio HF.")
+    parts = name.split("/")
+    if len(parts) not in (1, 2) or not all(
+        re.fullmatch(r"[\w.-]+", part) and part not in {".", ".."}
+        for part in parts
+    ):
+        raise ValueError("Repo HF inválido: usa modelo o usuario/modelo.")
+    if len(parts) == 2:
+        return name
+    hub = api or HfApi(token=token)
+    profile = hub.whoami(token=token)
+    username = profile.get("name") or profile.get("fullname")
+    if not username:
+        raise ValueError("No se pudo identificar el usuario del token HF.")
+    return f"{username}/{name}"
+
+
 def checkpoint_candidates(project: Path):
     training = project / "training"
     candidates = training.rglob("epoch=*-step=*.ckpt")
@@ -70,6 +91,38 @@ def _write_manifest(project: Path, manifest: dict) -> None:
     os.replace(temp, path)
 
 
+def _reject_existing_remote_checkpoint(
+    api: Any, repo_id: str, remote_path: str, sha256: str
+) -> bool:
+    """Prevent overwriting ANY previously published checkpoint on HF.
+
+    Return True only if a remote checkpoint has an independently verifiable
+    matching LFS SHA-256. Without an accessible SHA, fail closed.
+    """
+    try:
+        infos = api.get_paths_info(
+            repo_id, [remote_path], repo_type="model", expand=True
+        )
+    except TypeError:
+        infos = api.get_paths_info(repo_id, [remote_path], repo_type="model")
+    if not infos:
+        return False
+    if len(infos) != 1 or getattr(infos[0], "path", None) != remote_path:
+        raise RuntimeError("HF returned ambiguous checkpoint paths")
+    lfs = getattr(infos[0], "lfs", None)
+    stored_sha = (
+        lfs.get("sha256")
+        if isinstance(lfs, dict)
+        else getattr(lfs, "sha256", None)
+    )
+    if stored_sha and stored_sha.lower() == sha256.lower():
+        return True
+    raise ValueError(
+        f"El checkpoint {remote_path} ya existe en HF y no puede verificarse "
+        "que sea idéntico. No se sobrescribe ninguna versión."
+    )
+
+
 def _confirmed_remote_size(api: Any, repo_id: str, remote_path: str, expected: int) -> None:
     infos = api.get_paths_info(repo_id, [remote_path], repo_type="model")
     if len(infos) != 1 or getattr(infos[0], "path", None) != remote_path:
@@ -98,9 +151,13 @@ def sync_verified_checkpoints(
     Upload commits are confirmed with HF path and size before marking synced.
     """
     project = Path(project)
-    repo_id = repo_id.strip()
+    repo_id = (repo_id or "").strip()
     if not repo_id:
         raise ValueError("HF repo ID is required")
+    # This also validates explicit namespace/model names. For short names the
+    # authenticated account determines the namespace without user guesswork.
+    api = api or HfApi(token=token)
+    repo_id = resolve_repo_id(repo_id, token, api=api)
     prefix = (remote_prefix or "").strip("/")
     if prefix and (any(part in {".", "..", ""} for part in prefix.split("/"))
                    or prefix.startswith("/")):
@@ -118,7 +175,6 @@ def sync_verified_checkpoints(
     if not candidates:
         return result
 
-    api = api or HfApi(token=token)
     manifest = _read_manifest(project)
     verify = validator or _validate_in_subprocess
     stage_dir = project / ".hf_staging"
@@ -164,11 +220,15 @@ def sync_verified_checkpoints(
                 )
                 _confirmed_remote_size(api, repo_id, remote_config, config.stat().st_size)
 
-                api.upload_file(
-                    path_or_fileobj=str(snapshot), path_in_repo=remote_path,
-                    repo_id=repo_id, repo_type="model",
-                    commit_message=f"Verified Piper {checkpoint.name} step {report['global_step']}",
+                already_on_hf = _reject_existing_remote_checkpoint(
+                    api, repo_id, remote_path, report["sha256"]
                 )
+                if not already_on_hf:
+                    api.upload_file(
+                        path_or_fileobj=str(snapshot), path_in_repo=remote_path,
+                        repo_id=repo_id, repo_type="model",
+                        commit_message=f"Verified Piper {checkpoint.name} step {report['global_step']}",
+                    )
                 _confirmed_remote_size(api, repo_id, remote_path, before[0])
                 manifest[key] = {
                     "signature": list(before),

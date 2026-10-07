@@ -663,6 +663,10 @@ def start_training(
     hf_private: bool,
     hf_remote_prefix: str,
     hf_sync_interval: int,
+    hf_auto_backup: bool,
+    resume_source: str,
+    resume_hf_repo: str,
+    resume_hf_checkpoint: str,
 ) -> str:
     project = _project_dir(project_name)
     _assert_no_external_training(project)
@@ -712,22 +716,46 @@ def start_training(
         command.extend(["--max-phoneme-ids", str(int(max_phoneme_ids))])
 
     if mode == "Resume de corrida":
-        resume = _upload_path(resume_checkpoint_upload)
-        if resume is None and (resume_checkpoint_url or "").strip():
-            resume = _download_checkpoint(
-                resume_checkpoint_url.strip(),
-                project,
-                folder="resume",
+        if resume_source == "Hugging Face: último válido":
+            from .hf_resume import prepare_resume_from_hf
+            repo = (resume_hf_repo or "").strip() or (hf_repo_id or "").strip()
+            if not repo:
+                raise gr.Error("Escribe el repo HF de origen, p. ej. usuario/capibara.")
+            token = (hf_token or os.environ.get("HF_TOKEN", "")).strip()
+            try:
+                prepared = prepare_resume_from_hf(
+                    project=project, repo_name=repo, token=token,
+                    selected_checkpoint=resume_hf_checkpoint,
+                    max_epochs=int(max_epochs),
+                )
+            except Exception as error:
+                raise gr.Error(f"No se pudo recuperar HF: {error}") from error
+            resume = Path(prepared["download_path"])
+            init_description = (
+                f"HF {prepared['repository']}/{prepared['filename']} "
+                f"(epoch={prepared['epoch']}, global_step={prepared['global_step']}, "
+                f"SHA256={prepared['sha256'][:12]}...). "
+                f"Descargado en {resume}"
             )
-        if resume is None:
+        elif resume_source == "Subir checkpoint o URL":
+            resume = _upload_path(resume_checkpoint_upload)
+            if resume is None and (resume_checkpoint_url or "").strip():
+                resume = _download_checkpoint(
+                    resume_checkpoint_url.strip(), project, folder="resume"
+                )
+            if resume is None:
+                raise gr.Error("Sube el checkpoint o proporciona una URL para Resume.")
+            init_description = f"resume={resume}"
+        else:
             checkpoints = _checkpoint_paths(project)
             if not checkpoints:
                 raise gr.Error(
-                    "No hay checkpoint local para reanudar y no subiste/proporcionaste uno."
+                    "No hay checkpoint local. Selecciona Hugging Face, sube uno o "
+                    "descarga uno desde una URL."
                 )
             resume = checkpoints[-1]
+            init_description = f"resume={resume}"
         command.extend(["--resume_from_checkpoint", str(resume)])
-        init_description = f"resume={resume}"
     else:
         uploaded = _upload_path(base_checkpoint_upload)
         if uploaded is not None:
@@ -742,36 +770,129 @@ def start_training(
 
     token = (hf_token or os.environ.get("HF_TOKEN", "")).strip()
     repo_id = (hf_repo_id or "").strip()
-    sync_config = None
-    if repo_id:
+    if hf_auto_backup and repo_id:
         if not token:
-            raise gr.Error("Definiste un repo HF pero falta HF_TOKEN/token.")
-        sync_config = {
-            "project_name": _safe_project_name(project_name),
-            "repo_id": repo_id,
-            "token": token,
-            "private": bool(hf_private),
-            "remote_prefix": (hf_remote_prefix or "").strip(),
-            "interval": max(30, int(hf_sync_interval)),
-        }
+            raise gr.Error("Activaste subida automática pero falta el token HF.")
+        # Verify credentials and namespace before starting training.
+        from .hf_backup import resolve_repo_id
+        repo_id = resolve_repo_id(repo_id, token)
 
     try:
-        JOB.start(command, project, sync_config)
+        # Centralize upload tracking in the independent watcher. No duplicate
+        # in-training backup threads competing over the same checkpoint.
+        JOB.start(command, project, None)
     except RuntimeError as exc:
         raise gr.Error(str(exc)) from exc
+
+    sync_state = "desactivado"
+    if hf_auto_backup and repo_id:
+        try:
+            sync_state = activate_backup(
+                project_name, repo_id, token, hf_private, hf_sync_interval
+            )
+        except Exception as error:
+            sync_state = f"No se pudo activar HF: {error}. Usa Activar respaldo."
 
     return (
         f"Entrenamiento iniciado.\nModo: {mode} ({init_description})\n"
         f"Accelerator: {accel} (CUDA visible={cuda})\nBatch size: {batch_size}\n"
         f"Max epochs: {max_epochs}\n"
         f"Checkpoint: {'cada ' + str(checkpoint_minutes) + ' min' if float(checkpoint_minutes) > 0 else 'cada ' + str(checkpoint_epochs) + ' epoch(s)'}\n"
-        f"HF sync: {'activado' if sync_config else 'desactivado'}\n"
+        f"HF sync: {sync_state}\n"
         f"Log: {project / 'train.log'}"
     )
 
 
-def stop_training() -> str:
-    return JOB.stop()
+def inspect_hf_resume(repo_name: str, backup_repo: str, token: str):
+    """Show remote history and offer all version names as an override."""
+    from .hf_resume import ROOT_SELECTION, list_remote_versions
+
+    auth_token = (token or os.environ.get("HF_TOKEN", "")).strip()
+    try:
+        repo_id, versions = list_remote_versions(
+            (repo_name or "").strip() or (backup_repo or "").strip(), auth_token
+        )
+    except Exception as error:
+        raise gr.Error(f"No se pudo leer el repo de HF: {error}") from error
+    label = [
+        f"Repo: {repo_id}",
+        f"Checkpoints encontrados en raíz: {len(versions)}",
+        f"Más reciente por global_step: {versions[0]}",
+        "Selecciona Automático para elegir el más reciente que pase la validación, "
+        "o elige un checkpoint específico.",
+    ]
+    label.extend(f"  {i+1}. {name}" for i, name in enumerate(versions[:30]))
+    return (
+        gr.update(
+            choices=[ROOT_SELECTION] + versions,
+            value=ROOT_SELECTION,
+        ),
+        "\n".join(label),
+    )
+
+
+def training_running(project_name: str) -> bool:
+    project = _project_dir(project_name)
+    return (JOB.project == project and JOB.is_running()) or bool(
+        _other_training_pids(project)
+    )
+
+
+def training_buttons(project_name: str):
+    """Always use kernel process state, not stale browser state."""
+    running = training_running(project_name)
+    if running:
+        pids = _other_training_pids(_project_dir(project_name))
+        message = (
+            "Entrenamiento EN CURSO. El botón Iniciar está oculto. "
+            + (f"PID(s): {', '.join(map(str, pids))}" if pids else "Proceso local activo")
+        )
+    else:
+        message = "Sin entrenamiento activo para este proyecto. Puedes iniciar."
+    return gr.update(visible=not running), gr.update(visible=running), message
+
+
+def stop_training(project_name: str) -> str:
+    """Stop only the selected project's trainer, even across Gradio instances.
+
+    Never signal DataLoader children: identify the root trainer whose parent PID
+    is not another Piper trainer in the same project. No side effects except
+    when a real user clicks Detener.
+    """
+    project = _project_dir(project_name)
+    if JOB.project == project and JOB.is_running():
+        return JOB.stop()
+    matching = _other_training_pids(project)
+    if not matching:
+        return "No hay entrenamiento activo para este proyecto."
+    roots = []
+    for pid in matching:
+        try:
+            stat = (Path("/proc") / str(pid) / "stat").read_text()
+            ppid = int(stat.rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        if ppid not in matching:
+            roots.append(pid)
+    if len(roots) != 1:
+        raise gr.Error(
+            f"Se detectaron {len(roots)} procesos principales: "
+            "no puedo detenerlos con seguridad automáticamente."
+        )
+    root_pid = roots[0]
+    # Re-check the actual command line immediately before sending a signal.
+    if root_pid not in _other_training_pids(project):
+        raise gr.Error("El proceso cambió de estado; actualiza el panel.")
+    try:
+        os.kill(root_pid, signal.SIGINT)
+    except ProcessLookupError:
+        return "El entrenamiento ya terminó."
+    except PermissionError as error:
+        raise gr.Error("No hay permisos para detener el entrenamiento.") from error
+    return (
+        f"Se solicitó una detención controlada al trainer PID {root_pid} "
+        f"del proyecto {project.name}. Espera a que finalice."
+    )
 
 
 def refresh_status(project_name: str) -> Tuple[str, List[str]]:
@@ -882,14 +1003,17 @@ def load_ui_preferences(project_name=None, include_name=False):
     )
     values = [prefs[key] for key in FIELDS]
     backup_info = backup_status()
+    start_state, stop_state, train_notice = training_buttons(name)
     if include_name:
         return (
             name, *values, current_status, current_files,
             checkpoint_choice, summary, backup_info,
+            start_state, stop_state, train_notice,
         )
     return (
         *values, current_status, current_files,
         checkpoint_choice, summary, backup_info,
+        start_state, stop_state, train_notice,
     )
 
 
@@ -967,6 +1091,35 @@ def build_ui() -> gr.Blocks:
                 label="O URL directa/Drive de checkpoint para Resume",
                 placeholder="https://huggingface.co/.../epoch=...ckpt",
             )
+            gr.Markdown(
+                "### Reanudar desde Hugging Face (checkpoint + optimizadores)\n"
+                "Se detecta el mayor **global_step**, no el nombre alfabético; "
+                "se comprueba config.json, tamaño, SHA-256 y estructura del checkpoint. "
+                "Si el último está dañado, prueba uno anterior. "
+                "**Usa solo repositorios de confianza:** CKPT usa pickle."
+            )
+            resume_source = gr.Radio(
+                ["Local: último checkpoint", "Subir checkpoint o URL",
+                 "Hugging Face: último válido"],
+                value="Local: último checkpoint",
+                label="Origen para reanudar",
+            )
+            resume_hf_repo = gr.Textbox(
+                value="",
+                label="Repositorio HF de origen (vacío = usar el repo de backup)",
+                placeholder="usuario/mi-voz-piper o mi-voz-piper",
+            )
+            with gr.Row():
+                hf_versions_btn = gr.Button("Consultar checkpoints HF")
+                resume_hf_checkpoint = gr.Dropdown(
+                    choices=["Automático: último checkpoint válido"],
+                    value="Automático: último checkpoint válido",
+                    label="Versión para reanudar (automático = última válida)",
+                    allow_custom_value=True,
+                )
+            hf_versions_report = gr.Textbox(
+                label="Checkpoints disponibles en HF", lines=7, interactive=False
+            )
             with gr.Row():
                 batch_size = gr.Number(value=16, precision=0, label="Batch size")
                 max_epochs = gr.Number(value=1000, precision=0, label="Max epochs")
@@ -990,13 +1143,22 @@ def build_ui() -> gr.Blocks:
                 "No se eliminan ni modifican checkpoints anteriores en HF. "
                 "Puedes usar la variable HF_TOKEN."
             )
-            hf_repo_id = gr.Textbox(label="HF repo id", placeholder="usuario/mi-voz-piper")
+            hf_repo_id = gr.Textbox(label="Repositorio HF (nombre o usuario/nombre)", placeholder="mi-voz-piper o usuario/mi-voz-piper")
             hf_token = gr.Textbox(label="HF token", type="password")
             hf_private = gr.Checkbox(value=True, label="Repo privado")
+            hf_versions_btn.click(
+                inspect_hf_resume,
+                inputs=[resume_hf_repo, hf_repo_id, hf_token],
+                outputs=[resume_hf_checkpoint, hf_versions_report],
+            )
             # Fixed root-level HF layout: .ckpt files + config.json, never folders.
             hf_remote_prefix = gr.State("")
             hf_sync_interval = gr.Number(
-                value=120, precision=0, label="Sincronizar cada N segundos (mín. 30)"
+                value=20, precision=0, label="Buscar checkpoints nuevos cada N segundos (mín. 15)"
+            )
+            hf_auto_backup = gr.Checkbox(
+                value=True,
+                label="Subir automáticamente cada checkpoint nuevo y validado a HF",
             )
             gr.Markdown(
                 "El respaldo puede iniciarse **aunque este entrenamiento ya esté "
@@ -1019,8 +1181,12 @@ def build_ui() -> gr.Blocks:
             disable_backup_btn.click(disable_backup, outputs=[backup_report])
             check_backup_btn.click(backup_status, outputs=[backup_report])
 
-            start_btn = gr.Button("Iniciar entrenamiento", variant="primary")
-            stop_btn = gr.Button("Detener entrenamiento", variant="stop")
+            training_notice = gr.Textbox(
+                label="Estado del entrenador (actualización automática)",
+                interactive=False, lines=2,
+            )
+            start_btn = gr.Button("Iniciar entrenamiento", variant="primary", visible=True)
+            stop_btn = gr.Button("Detener entrenamiento", variant="stop", visible=False)
             start_report = gr.Textbox(label="Inicio/Stop", lines=10)
             start_btn.click(
                 start_training,
@@ -1042,10 +1208,22 @@ def build_ui() -> gr.Blocks:
                     hf_private,
                     hf_remote_prefix,
                     hf_sync_interval,
+                    hf_auto_backup,
+                    resume_source,
+                    resume_hf_repo,
+                    resume_hf_checkpoint,
                 ],
                 outputs=start_report,
+            ).then(
+                training_buttons, inputs=[project_name],
+                outputs=[start_btn, stop_btn, training_notice],
             )
-            stop_btn.click(stop_training, outputs=start_report)
+            stop_btn.click(
+                stop_training, inputs=[project_name], outputs=start_report
+            ).then(
+                training_buttons, inputs=[project_name],
+                outputs=[start_btn, stop_btn, training_notice],
+            )
 
         with gr.Tab("4. Estado y checkpoints"):
             refresh_btn = gr.Button("Actualizar estado")
@@ -1148,6 +1326,9 @@ def build_ui() -> gr.Blocks:
             "mode": mode,
             "base_checkpoint_url": base_checkpoint_url,
             "resume_checkpoint_url": resume_checkpoint_url,
+            "resume_source": resume_source,
+            "resume_hf_repo": resume_hf_repo,
+            "resume_hf_checkpoint": resume_hf_checkpoint,
             "batch_size": batch_size,
             "max_epochs": max_epochs,
             "checkpoint_epochs": checkpoint_epochs,
@@ -1157,6 +1338,7 @@ def build_ui() -> gr.Blocks:
             "hf_repo_id": hf_repo_id,
             "hf_private": hf_private,
             "hf_sync_interval": hf_sync_interval,
+            "hf_auto_backup": hf_auto_backup,
             "inference_text": infer_text,
             "inference_language": infer_language,
             "length_scale": length_scale,
@@ -1168,6 +1350,7 @@ def build_ui() -> gr.Blocks:
         outputs = controls + [
             status_box, checkpoint_files, inference_checkpoint,
             preferences_status, backup_report,
+            start_btn, stop_btn, training_notice,
         ]
         demo.load(
             lambda: load_ui_preferences(include_name=True),
@@ -1177,6 +1360,14 @@ def build_ui() -> gr.Blocks:
         project_name.input(
             lambda name: load_ui_preferences(name, include_name=False),
             inputs=[project_name], outputs=outputs,
+            show_progress="hidden",
+        )
+        # Poll the actual kernel process table, so controls remain correct
+        # when a different Gradio instance owns the training job.
+        pulse = gr.Timer(7)
+        pulse.tick(
+            training_buttons, inputs=[project_name],
+            outputs=[start_btn, stop_btn, training_notice],
             show_progress="hidden",
         )
         for component in controls:

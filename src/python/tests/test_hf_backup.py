@@ -107,6 +107,48 @@ class VerifiedBackupTests(unittest.TestCase):
             self.assertEqual(len(report["failed"]), 1)
             self.assertNotIn(checkpoint.name, hf.uploads)
 
+    def test_different_remote_config_size_does_not_block_new_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            ckpt = write_project(project)
+            hub = FakeHf()
+            # The previous fine-tune saved a different config.json.
+            hub.files["config.json"] = 1234
+            hub.contents["config.json"] = b"older settings"
+            old_contents = hub.contents["config.json"]
+            result = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub,
+                validator=lambda p, c: {
+                    "size": p.stat().st_size, "name": p.name,
+                    "sha256": "abc", "epoch": 0, "global_step": 84,
+                },
+            )
+            self.assertEqual(result["uploaded"], [ckpt.name])
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(result["config_status"], "already_remote")
+            self.assertNotIn("config.json", hub.uploads)
+            self.assertEqual(hub.contents["config.json"], old_contents)
+
+    def test_existing_remote_config_same_size_is_left_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            ckpt = write_project(project)
+            hub = FakeHf()
+            local = (project / "training" / "config.json").read_bytes()
+            hub.files["config.json"] = len(local)
+            hub.contents["config.json"] = b"x" * len(local)
+            result = sync_verified_checkpoints(
+                project, "test/my-model", "FAKE", api=hub,
+                validator=lambda p, c: {
+                    "size": p.stat().st_size, "name": p.name,
+                    "sha256": "abc", "epoch": 0, "global_step": 84,
+                },
+            )
+            self.assertEqual(result["uploaded"], [ckpt.name])
+            self.assertEqual(result["config_status"], "already_remote")
+            self.assertEqual(hub.contents["config.json"], b"x" * len(local))
+            self.assertNotIn("config.json", hub.uploads)
+
     def test_root_name_and_manifest_prevent_reupload(self):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)

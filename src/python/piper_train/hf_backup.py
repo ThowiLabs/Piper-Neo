@@ -5,7 +5,6 @@ does not expose that token to the checkpoint validator subprocess.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -17,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import HfApi
 from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
 
 from .hf_settings import (
@@ -198,14 +197,6 @@ def _ensure_remote_model_repo(api: Any, repo_id: str, token: str, private: bool)
     return "created"
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _cli_upload_checkpoint(repo_id: str, checkpoint: Path, token: str) -> None:
     """Use the proven CLI transport if HfApi's large-file transfer fails.
 
@@ -235,39 +226,23 @@ def _cli_upload_checkpoint(repo_id: str, checkpoint: Path, token: str) -> None:
 
 
 def _ensure_remote_config(api: Any, repo_id: str, token: str, config: Path) -> str:
-    """Upload missing config.json or confirm identical bytes. Never replace."""
+    """Only upload config.json if absent; an existing remote is NEVER compared.
+
+    A new CKPT is validated with the LOCAL training/config.json before upload.
+    The shared remote config.json may legitimately differ in size/content after
+    reprocessing the dataset; such differences do not block CKPT backups.
+    Resume still enforces compatibility independently in hf_resume.py.
+    """
     remote_path = "config.json"
-    info = _remote_info(api, repo_id, remote_path)
-    if info is None:
-        # Checkpoint is already valid before this function is called.
-        api.upload_file(
-            path_or_fileobj=str(config), path_in_repo=remote_path,
-            repo_id=repo_id, repo_type="model", token=token,
-            commit_message="Add Piper config.json (append-only backup)",
-        )
-        _confirmed_remote_size(api, repo_id, remote_path, config.stat().st_size)
-        return "uploaded"
-    size = getattr(info, "size", None)
-    if size != config.stat().st_size:
-        raise ValueError(
-            "config.json YA EXISTE en HF pero su tamaño es diferente. "
-            "No se sobrescribe: revisa que sea la misma voz/dataset."
-        )
-    # Small config: verify content, not only size. In tests the fake API exposes
-    # a download helper; in production Hugging Face provides hf_hub_download.
-    if hasattr(api, "download_file"):
-        remote_file = Path(api.download_file(repo_id=repo_id, filename=remote_path))
-    else:
-        remote_file = Path(hf_hub_download(
-            repo_id=repo_id, filename=remote_path, repo_type="model",
-            token=token or None,
-        ))
-    if _sha256_file(remote_file) != _sha256_file(config):
-        raise ValueError(
-            "config.json YA EXISTE en HF pero su contenido es diferente. "
-            "Se conserva la versión remota sin cambios."
-        )
-    return "already_remote"
+    if _remote_info(api, repo_id, remote_path) is not None:
+        return "already_remote"
+    api.upload_file(
+        path_or_fileobj=str(config), path_in_repo=remote_path,
+        repo_id=repo_id, repo_type="model", token=token,
+        commit_message="Add Piper config.json (append-only backup)",
+    )
+    _confirmed_remote_size(api, repo_id, remote_path, config.stat().st_size)
+    return "uploaded"
 
 
 def sync_verified_checkpoints(

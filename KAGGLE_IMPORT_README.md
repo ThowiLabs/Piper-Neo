@@ -17,9 +17,14 @@ entre GitHub/ZIP. Clona directamente la rama de Studio del proyecto original.
 
 1. Importa `notebooks/KAGGLE_IMPORT_PIPER_NEO_STUDIO.ipynb` en un Kaggle nuevo.
 2. En Settings activa GPU NVIDIA (p. ej., Tesla T4) e Internet.
-3. Ejecuta las celdas en orden. Se clonará
+3. Ejecuta las celdas en orden. Se vuelve a clonar el código oficial
    `https://github.com/ThowiLabs/Piper-Neo.git` en
    `/kaggle/working/Piper-Neo`, rama `feature/resilient-finetune-studio`.
+   Si hay un clon previo, primero se comprueba que sea el oficial y que no
+   haya entrenadores/Gradio activos ni datos dentro del checkout. El nuevo
+   clon se descarga **antes** de sustituir el anterior; si algo impide
+   eliminarlo, la operación se detiene en lugar de perder información.
+   **No ejecute la reinstalación durante un entrenamiento activo.**
 4. El script de instalación fija Python 3.10 y dependencias del fine-tune.
    **El paquete portable precompilado todavía no está terminado**.
 5. Se verifican GPU/CUDA y las pruebas de HF backup/resume/inferencia.
@@ -83,7 +88,9 @@ Si el archivo no llega a Gradio (por error de transferencia del CSV o ZIP),
 el código de validación ni siquiera se ejecuta. En ese caso presiona
 **Ver diagnóstico del servidor y dataset**: consulta también el archivo
 `/kaggle/working/Piper-Neo/studio_kaggle.log` si lanzaste Gradio
-mediante este notebook. El servidor conserva `show_error=True`.
+mediante este notebook. El log del servidor se guarda ahora en
+`/kaggle/working/piper_finetune/studio_kaggle.log` y sigue accesible
+aunque se reinstale el clon. El servidor conserva `show_error=True`.
 Si no aparece ni en ese registro, revisa la pestaña Network/Console del
 navegador y comprueba la carga del archivo.
 
@@ -107,3 +114,11 @@ Repositorio predeterminado: `HirCoir/piper-checkpoint-es-mx-capybara` (tipo **mo
 **Cambio de token:** Pulsa de nuevo **Activar respaldo HF independiente** con el token vigente en **el Gradio dueño del watcher**. Si coincide el proyecto/repositorio, actualiza las credenciales en memoria sin detener el fine-tune. Otros servidores Gradio tienen watchers independientes y no se actualizan automáticamente. El secreto caduca si así fue configurado; para respaldos prolongados usa un token con permisos mínimos y vigencia suficiente.
 
 **Actualización del código:** Después de publicar los commits en GitHub, el servidor Gradio antiguo no cargará los cambios por refrescar el navegador. Inicia un nuevo proceso Gradio cuando sea seguro; evita reiniciar el kernel si el entrenamiento activo debe seguir funcionando.
+
+### Restauración del clon y separación de datos
+
+- El cuaderno oficial siempre descarga un **clon nuevo del código**. Si ya existe `/kaggle/working/Piper-Neo`, verifica el origen oficial, comprueba que no haya entrenamientos ni Gradio utilizándolo, ni datasets o checkpoints guardados accidentalmente dentro de él, y solo entonces sustituye el clon anterior.
+- Los archivos de trabajo van en `/kaggle/working/piper_finetune`: `capibara/input`, `capibara/training`, `resume_hf`, los checkpoints, preferencias y logs de Gradio. `GRADIO_TEMP_DIR` también queda ahí. Nunca se borran durante la reinstalación del clon.
+- **Importante:** fuera del repositorio Git **no significa almacenamiento permanente de Kaggle**. Un reset completo del runtime puede borrar `/kaggle/working`, incluido `piper_finetune`. Respalda checkpoints en Hugging Face y datasets en una fuente externa duradera.
+- Si `config.json` ya existe en HF, el respaldo **no lo sobrescribe, no lo descarga ni compara tamaño o contenido**, y **no bloquea nuevos checkpoints** por diferencias de configuración. Solo valida el CKPT usando `training/config.json` local, sube el archivo nuevo y muestra que el config remoto se conservó. La recuperación futura desde HF sigue requiriendo una configuración compatible: respaldar el CKPT no garantiza que se pueda recuperar con cualquier configuración.
+- En un Kaggle **donde ya se esté entrenando**, NO vuelvas a ejecutar la celda de reemplazo del clon. Primero deja terminar el entrenamiento y confirma respaldo remoto.

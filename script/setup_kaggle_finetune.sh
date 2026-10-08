@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 PY_DIR="$ROOT_DIR/src/python"
+
+# The source checkout is disposable, but datasets, checkpoints, saved
+# settings and runtime logs must be in a separate directory.
+DATA_DIR="${PIPER_FINETUNE_ROOT:-/kaggle/working/piper_finetune}"
+mkdir -p "$DATA_DIR"
+DATA_DIR="$(cd "$DATA_DIR" && pwd -P)"
+case "$DATA_DIR/" in
+  "$ROOT_DIR/"*) echo "ERROR: PIPER_FINETUNE_ROOT no puede estar dentro de Piper-Neo." >&2; exit 1 ;;
+esac
+export PIPER_FINETUNE_ROOT="$DATA_DIR"
+export GRADIO_TEMP_DIR="$DATA_DIR/gradio_tmp"
+mkdir -p "$GRADIO_TEMP_DIR"
 
 cd "$PY_DIR"
 

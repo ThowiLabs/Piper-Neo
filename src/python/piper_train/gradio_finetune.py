@@ -45,7 +45,15 @@ from .hf_settings import (
     DEFAULT_HF_REPO, hf_auth_token, select_hf_repo, require_hf_auth_for_private_repo,
 )
 
-KAGGLE_ROOT = Path(os.environ.get("PIPER_FINETUNE_ROOT", "/kaggle/working/piper_finetune"))
+KAGGLE_ROOT = Path(os.environ.get("PIPER_FINETUNE_ROOT", "/kaggle/working/piper_finetune")).resolve()
+# A fresh Git clone is disposable; user data must never live inside it.
+_CODE_ROOT = Path(__file__).resolve().parents[3]
+if KAGGLE_ROOT == _CODE_ROOT or _CODE_ROOT in KAGGLE_ROOT.parents:
+    raise RuntimeError(
+        "PIPER_FINETUNE_ROOT está dentro del código de Piper-Neo. "
+        "Usa /kaggle/working/piper_finetune para conservar los datasets "
+        "y checkpoints durante una reinstalación."
+    )
 DEFAULT_BASE_URL = (
     "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/"
     "es/es_ES/davefx/medium/epoch%3D5629-step%3D1605020.ckpt"
@@ -462,7 +470,10 @@ def prepare_dataset_with_diagnostics(
 def latest_dataset_diagnostics(project_name: str) -> tuple[str, Optional[str]]:
     """Show also Gradio's own log, including errors BEFORE callbacks execute."""
     path = _prepare_log_path(project_name)
-    server_log = Path(__file__).resolve().parents[3] / "studio_kaggle.log"
+    server_log = KAGGLE_ROOT / "studio_kaggle.log"
+    legacy_log = _CODE_ROOT / "studio_kaggle.log"
+    if not server_log.is_file() and legacy_log.is_file():
+        server_log = legacy_log
     lines = []
     local = _read_end(path)
     if local:
@@ -474,7 +485,7 @@ def latest_dataset_diagnostics(project_name: str) -> tuple[str, Optional[str]]:
         return (
             "Todavía no hay registros. Si el archivo CSV falla ANTES de llamar "
             "a Gradio, consulta la salida de la celda 'Abrir Gradio' del notebook "
-            "o /kaggle/working/Piper-Neo/studio_kaggle.log.",
+            "o /kaggle/working/piper_finetune/studio_kaggle.log.",
             None,
         )
     return _sanitize_diagnostic("\n\n".join(lines))[-16000:], str(path) if path.is_file() else None
@@ -624,6 +635,12 @@ def sync_to_huggingface(
         f"Fallos/rechazados (no se subieron): {len(report['failed'])}\n"
         f"config.json: {report.get('config_status', 'sin comprobar')}"
     )
+    if report["config_status"] == "already_remote":
+        message += (
+            "\nconfig.json ya existía en HF: se conserva intacto sin comparar "
+            "tamaño ni contenido. Los CKPT nuevos se validan con el config local. "
+            "Para Resume sigue siendo necesaria una configuración compatible."
+        )
     if report["uploaded"]:
         message += "\nNuevos respaldos: " + ", ".join(report["uploaded"])
     if report["skipped"]:
